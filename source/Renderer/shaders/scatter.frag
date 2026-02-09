@@ -109,7 +109,11 @@ void main()
 
 #ifdef MATERIAL_DIFFUSE_TRANSMISSION
     f_diffuse = getDiffuseLight(n) * materialInfo.diffuseTransmissionColorFactor;
-    f_diffuse *= materialInfo.diffuseTransmissionFactor;
+        f_diffuse *= materialInfo.diffuseTransmissionFactor;
+#ifdef MATERIAL_VOLUME
+        f_diffuse =  1 - applyVolumeAttenuation(f_diffuse, diffuseTransmissionThickness, materialInfo.attenuationColor, materialInfo.attenuationDistance);
+#endif
+
 #endif
 
 #ifdef MATERIAL_SHEEN
@@ -158,6 +162,9 @@ void main()
 #ifdef MATERIAL_DIFFUSE_TRANSMISSION
         l_diffuse = lightIntensity * NdotL * BRDF_lambertian(materialInfo.diffuseTransmissionColorFactor);
         l_diffuse *= materialInfo.diffuseTransmissionFactor;
+#ifdef MATERIAL_VOLUME
+        l_diffuse =  1 - applyVolumeAttenuation(l_diffuse, diffuseTransmissionThickness, materialInfo.attenuationColor, materialInfo.attenuationDistance);
+#endif
         
 #endif // MATERIAL_DIFFUSE_TRANSMISSION
 

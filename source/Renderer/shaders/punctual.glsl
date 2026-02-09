@@ -167,7 +167,7 @@ vec3 burley_eval(vec3 d, float r)
 }
 
 
-vec3 getSubsurfaceScattering(vec3 position, mat4 projectionMatrix, vec3 attenuationDistance, sampler2D scatterLUT, vec3 diffuseColor, vec3 multiscatterColor) {
+vec3 getSubsurfaceScattering(vec3 position, mat4 projectionMatrix, vec3 attenuationDistance, sampler2D scatterLUT, vec3 diffuseColor, vec3 multiscatterColor, vec3 singleScatterColor) {
     vec3 scatterDistance = attenuationDistance; // Scale the attenuation distance by the multi-scatter color
     float maxColor = max3(scatterDistance);
     vec2 texelSize = 1.0 / vec2(textureSize(u_ScatterDepthFramebufferSampler, 0));
@@ -193,7 +193,7 @@ vec3 getSubsurfaceScattering(vec3 position, mat4 projectionMatrix, vec3 attenuat
     vec3 totalDiffuse = vec3(0.0);
 
     vec3 clampedScatterDistance = max(vec3(u_MinRadius), scatterDistance / maxColor) * maxColor;
-    vec3 d = burley_setup(clampedScatterDistance, diffuseColor); // Setup the Burley model parameters
+    vec3 d = burley_setup(clampedScatterDistance, vec3(1.0)); // Setup the Burley model parameters
 
     for (int i = 0; i < SCATTER_SAMPLES_COUNT; i++) {
         vec3 scatterSample = u_ScatterSamples[i];
@@ -221,6 +221,7 @@ vec3 getSubsurfaceScattering(vec3 position, mat4 projectionMatrix, vec3 attenuat
         }
     }
     totalWeight = max(totalWeight, vec3(0.0001)); // Avoid division by zero
-    return totalDiffuse / totalWeight * diffuseColor;
+    return totalDiffuse / totalWeight * diffuseColor * multiscatterColor * singleScatterColor;
+
 }
 #endif // MATERIAL_VOLUME_SCATTER
