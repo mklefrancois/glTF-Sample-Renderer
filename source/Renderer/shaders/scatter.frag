@@ -178,6 +178,6 @@ void main()
         color += l_dielectric_brdf * albedoSheenScaling;
     }
     
-    frontColor += vec4(color.rgb * materialInfo.multiscatterColor, 0.0);
+    frontColor += vec4(color.rgb, 0.0);
 #endif // USE_PUNCTUAL
 }
