@@ -1026,7 +1026,7 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
             quat.equals(scaleAxis, quat.create()) === false
         ) {
             const data = createBoxVertexData(x, y, z);
-            return this.createConvexPxMesh(data.vertices, data.indices, scale, scaleAxis);
+            return this.createConvexPxMesh(data.vertices, scale, scaleAxis);
         }
         let geometry = undefined;
         if (referenceType === "eBOX") {
@@ -1050,7 +1050,7 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
 
     generateCapsule(height, radiusTop, radiusBottom, scale, scaleAxis, reference) {
         const data = createCapsuleVertexData(radiusTop, radiusBottom, height);
-        return this.createConvexPxMesh(data.vertices, data.indices, scale, scaleAxis);
+        return this.createConvexPxMesh(data.vertices, scale, scaleAxis);
     }
 
     generateCylinder(height, radiusTop, radiusBottom, scale, scaleAxis, reference) {
@@ -1061,13 +1061,13 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
             scale[0] !== scale[2]
         ) {
             const data = createCylinderVertexData(radiusTop, radiusBottom, height);
-            return this.createConvexPxMesh(data.vertices, data.indices, scale, scaleAxis);
+            return this.createConvexPxMesh(data.vertices, scale, scaleAxis);
         }
         height *= scale[1];
         radiusTop *= scale[0];
         radiusBottom *= scale[0];
         const data = createCylinderVertexData(radiusTop, radiusBottom, height);
-        return this.createConvexPxMesh(data.vertices, data.indices);
+        return this.createConvexPxMesh(data.vertices);
     }
 
     generateSphere(radius, scale, scaleAxis, reference) {
@@ -1077,7 +1077,7 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         }
         if (scale.every((value) => value === scale[0]) === false) {
             const data = createCapsuleVertexData(radius, radius, 0);
-            return this.createConvexPxMesh(data.vertices, data.indices, scale, scaleAxis);
+            return this.createConvexPxMesh(data.vertices, scale, scaleAxis);
         } else {
             radius *= scale[0];
         }
@@ -2328,6 +2328,8 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         }
 
         this.nodeToActor.clear();
+        this.nodeToTrigger.clear();
+
         if (scenePointer) {
             scenePointer.release();
         }
