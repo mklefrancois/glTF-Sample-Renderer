@@ -167,18 +167,6 @@ class PhysicsController {
         this.timeAccumulator = 0;
         this.pauseTime = undefined;
         this.skipFrames = 0; // Skip the first two simulation frames to allow engine to initialize
-
-        //TODO PxShape needs to be recreated if collisionFilter differs
-        //TODO Cache geometries for faster computation
-        // PxShape has localTransform which applies to all actors using the shape
-        // setGlobalPos can move static actors in a non physically accurate way and dynamic actors in a physically accurate way
-        // otherwise use kinematic actors for physically accurate movement of static actors
-
-        // MORPH: Call PxShape::setGeometry on each shape which references the mesh, to ensure that internal data structures are updated to reflect the new geometry.
-
-        // Which scale affects the collider geometry?
-
-        // Different primitive modes?
     }
 
     calculateMorphColliders(gltf) {
@@ -225,18 +213,6 @@ class PhysicsController {
             }
 
             this.engine.updateMorphedColliderGeometry(node, vertices);
-        }
-    }
-
-    calculateSkinnedColliders(gltf) {
-        for (const node of this.skinnedColliders) {
-            const mesh = gltf.meshes[node.mesh];
-            const skin = gltf.skins[node.skin];
-            const inverseBindMatricesAccessor = gltf.accessors[skin.inverseBindMatrices];
-            const inverseBindMatrices =
-                inverseBindMatricesAccessor.getNormalizedDeinterlacedView(gltf);
-            const jointNodes = skin.joints.map((jointIndex) => gltf.nodes[jointIndex]);
-            //TODO: Implement skinned collider calculation
         }
     }
 
@@ -913,11 +889,20 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
                 if (newGeometry.getType() !== currentColliderType) {
                     // We need to recreate the shape
                     this.PhysX.destroy(currentShape);
+                    let shapeFlags = undefined;
+                    if (isTrigger) {
+                        shapeFlags = this.PhysX.PxShapeFlagEnum.eTRIGGER_SHAPE;
+                    } else {
+                        shapeFlags = this.PhysX.PxShapeFlagEnum.eSIMULATION_SHAPE;
+                    }
+                    if (this.debugColliders) {
+                        shapeFlags |= this.PhysX.PxShapeFlagEnum.eVISUALIZATION;
+                    }
                     const shape = this.createShapeFromGeometry(
                         newGeometry,
                         undefined,
                         undefined,
-                        undefined /*TODO*/,
+                        shapeFlags,
                         collider
                     );
                     result?.pxShapeMap.set(node.gltfObjectIndex, shape);
@@ -1664,8 +1649,10 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         this.PhysX.destroy(poseA);
         this.PhysX.destroy(poseB);
 
-        //TODO toogle debug view
-        physxJoint.setConstraintFlag(this.PhysX.PxConstraintFlagEnum.eVISUALIZATION, true);
+        physxJoint.setConstraintFlag(
+            this.PhysX.PxConstraintFlagEnum.eVISUALIZATION,
+            this.debugJoints
+        );
 
         this.nodeToJoint.set(node.gltfObjectIndex, physxJoint);
 
@@ -1945,6 +1932,16 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
             this.debugJoints ? 1 : 0
         );
         this.scene.setVisualizationParameter(this.PhysX.eJOINT_LIMITS, this.debugJoints ? 1 : 0);
+        for (const joint of this.nodeToJoint.values()) {
+            joint.setConstraintFlag(
+                this.PhysX.PxConstraintFlagEnum.eVISUALIZATION,
+                this.debugJoints
+            );
+        }
+        for (const shapePtr of this.shapeToNode.keys()) {
+            const shape = this.PhysX.wrapPointer(shapePtr, this.PhysX.PxShape);
+            shape.setFlag(this.PhysX.PxShapeFlagEnum.eVISUALIZATION, this.debugColliders);
+        }
     }
 
     initializeSimulation(
@@ -2077,13 +2074,10 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         console.log("Created scene");
         const shapeFlags = new this.PhysX.PxShapeFlags(
             this.PhysX.PxShapeFlagEnum.eSCENE_QUERY_SHAPE |
-                this.PhysX.PxShapeFlagEnum.eSIMULATION_SHAPE |
-                this.PhysX.PxShapeFlagEnum.eVISUALIZATION
+                this.PhysX.PxShapeFlagEnum.eSIMULATION_SHAPE
         );
 
-        const triggerFlags = new this.PhysX.PxShapeFlags(
-            this.PhysX.PxShapeFlagEnum.eTRIGGER_SHAPE | this.PhysX.PxShapeFlagEnum.eVISUALIZATION
-        );
+        const triggerFlags = new this.PhysX.PxShapeFlags(this.PhysX.PxShapeFlagEnum.eTRIGGER_SHAPE);
 
         const alwaysConvexMeshes =
             dynamicMeshColliderCount > 1 ||
