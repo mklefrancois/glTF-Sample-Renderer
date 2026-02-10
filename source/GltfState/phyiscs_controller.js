@@ -1349,6 +1349,9 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
             word1 = Math.pow(2, 32) - 1;
         }
 
+        additionalFlags |= this.PhysX.PxPairFlagEnum.eDETECT_DISCRETE_CONTACT;
+        additionalFlags |= this.PhysX.PxPairFlagEnum.eDETECT_CCD_CONTACT;
+
         return new this.PhysX.PxFilterData(word0, word1, additionalFlags, 0);
     }
 
@@ -1439,6 +1442,7 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
             if (type === "kinematic") {
                 actor.setRigidBodyFlag(this.PhysX.PxRigidBodyFlagEnum.eKINEMATIC, true);
             }
+            actor.setRigidBodyFlag(this.PhysX.PxRigidBodyFlagEnum.eENABLE_CCD, true);
             const motion = node.extensions?.KHR_physics_rigid_bodies?.motion;
             if (motion) {
                 const gltfAngularVelocity = motion?.angularVelocity;
@@ -1980,6 +1984,8 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         sceneDesc.set_gravity(tmpVec);
         sceneDesc.set_cpuDispatcher(this.PhysX.DefaultCpuDispatcherCreate(0));
         sceneDesc.set_filterShader(this.PhysX.DefaultFilterShader());
+        sceneDesc.flags |= this.PhysX.PxSceneFlagEnum.eENABLE_CCD;
+
         this.scene = this.physics.createScene(sceneDesc);
         let triggerCallback = undefined;
 
