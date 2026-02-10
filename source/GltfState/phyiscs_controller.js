@@ -33,6 +33,62 @@ class PhysicsUtils {
         return { scale: scaleFactor, scaleAxis: scaleRotation };
     }
 
+    /**
+     * Converts triangle strip indices to triangle list indices
+     * @param {Uint32Array|Array} stripIndices - The triangle strip indices
+     * @returns {Uint32Array} - Triangle list indices
+     */
+    static convertTriangleStripToTriangles(stripIndices) {
+        if (stripIndices.length < 3) {
+            return new Uint32Array(0);
+        }
+
+        const triangleCount = stripIndices.length - 2;
+        const triangleIndices = new Uint32Array(triangleCount * 3);
+        let triangleIndex = 0;
+
+        for (let i = 0; i < triangleCount; i++) {
+            if (i % 2 === 0) {
+                // Even triangle: maintain winding order
+                triangleIndices[triangleIndex++] = stripIndices[i];
+                triangleIndices[triangleIndex++] = stripIndices[i + 1];
+                triangleIndices[triangleIndex++] = stripIndices[i + 2];
+            } else {
+                // Odd triangle: reverse winding order
+                triangleIndices[triangleIndex++] = stripIndices[i];
+                triangleIndices[triangleIndex++] = stripIndices[i + 2];
+                triangleIndices[triangleIndex++] = stripIndices[i + 1];
+            }
+        }
+
+        return triangleIndices;
+    }
+
+    /**
+     * Converts triangle fan indices to triangle list indices
+     * @param {Uint32Array|Array} fanIndices - The triangle fan indices
+     * @returns {Uint32Array} - Triangle list indices
+     */
+    static convertTriangleFanToTriangles(fanIndices) {
+        if (fanIndices.length < 3) {
+            return new Uint32Array(0);
+        }
+
+        const triangleCount = fanIndices.length - 2;
+        const triangleIndices = new Uint32Array(triangleCount * 3);
+        let triangleIndex = 0;
+
+        const centerVertex = fanIndices[0];
+
+        for (let i = 1; i < fanIndices.length - 1; i++) {
+            triangleIndices[triangleIndex++] = fanIndices[i];
+            triangleIndices[triangleIndex++] = fanIndices[i + 1];
+            triangleIndices[triangleIndex++] = centerVertex;
+        }
+
+        return triangleIndices;
+    }
+
     static recurseCollider(
         gltf,
         node,
@@ -864,7 +920,7 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
                         undefined /*TODO*/,
                         collider
                     );
-                    pxShapeMap.set(node.gltfObjectIndex, shape);
+                    result?.pxShapeMap.set(node.gltfObjectIndex, shape);
                     actor.detachShape(currentShape);
                     actor.attachShape(shape);
                     currentGeometry = newGeometry;
@@ -1057,12 +1113,7 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         return geometry;
     }
 
-    createConvexPxMesh(
-        vertices,
-        indices,
-        scale = vec3.fromValues(1, 1, 1),
-        scaleAxis = quat.create()
-    ) {
+    createConvexPxMesh(vertices, scale = vec3.fromValues(1, 1, 1), scaleAxis = quat.create()) {
         const malloc = (f, q) => {
             const nDataBytes = f.length * f.BYTES_PER_ELEMENT;
             if (q === undefined) q = this.PhysX._webidl_malloc(nDataBytes);
@@ -1076,12 +1127,13 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         des.points.data = malloc(vertices);
 
         let flag = 0;
-        flag |= this.PhysX._emscripten_enum_PxConvexFlagEnum_eCOMPUTE_CONVEX();
-        flag |= this.PhysX._emscripten_enum_PxConvexFlagEnum_eQUANTIZE_INPUT();
-        flag |= this.PhysX._emscripten_enum_PxConvexFlagEnum_eDISABLE_MESH_VALIDATION();
+        flag |= this.PhysX.PxConvexFlagEnum.eCOMPUTE_CONVEX;
+        flag |= this.PhysX.PxConvexFlagEnum.eSHIFT_VERTICES;
+        //flag |= this.PhysX.PxConvexFlagEnum.eDISABLE_MESH_VALIDATION;
         const pxflags = new this.PhysX.PxConvexFlags(flag);
         des.flags = pxflags;
         const cookingParams = new this.PhysX.PxCookingParams(this.tolerances);
+        cookingParams.planeTolerance = 0.0007; //Default
         const tri = this.PhysX.CreateConvexMesh(cookingParams, des);
         this.convexMeshes.push(tri);
 
@@ -1099,8 +1151,7 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         return geometry;
     }
 
-    collectVerticesAndIndicesFromMesh(gltf, mesh) {
-        // TODO Handle different primitive modes
+    collectVerticesAndIndicesFromMesh(gltf, mesh, computeIndices = true) {
         let positionDataArray = [];
         let positionCount = 0;
         let indexDataArray = [];
@@ -1141,14 +1192,27 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
 
             positionDataArray.push(positionData);
             positionCount += positionAccessor.count;
-            if (primitive.indices !== undefined) {
-                const indexAccessor = gltf.accessors[primitive.indices];
-                indexDataArray.push(indexAccessor.getNormalizedDeinterlacedView(gltf));
-                indexCount += indexAccessor.count;
-            } else {
-                const array = Array.from(Array(positionAccessor.count).keys());
-                indexDataArray.push(new Uint32Array(array));
-                indexCount += positionAccessor.count;
+            if (computeIndices) {
+                let indexData = undefined;
+                if (primitive.indices !== undefined) {
+                    const indexAccessor = gltf.accessors[primitive.indices];
+                    indexData = indexAccessor.getNormalizedDeinterlacedView(gltf);
+                } else {
+                    const array = Array.from(Array(positionAccessor.count).keys());
+                    indexData = new Uint32Array(array);
+                }
+                if (primitive.mode === 5) {
+                    indexData = PhysicsUtils.convertTriangleStripToTriangles(indexData);
+                } else if (primitive.mode === 6) {
+                    indexData = PhysicsUtils.convertTriangleFanToTriangles(indexData);
+                } else if (primitive.mode !== undefined && primitive.mode !== 4) {
+                    console.warn(
+                        "Unsupported primitive mode for physics mesh collider creation: " +
+                            primitive.mode
+                    );
+                }
+                indexDataArray.push(indexData);
+                indexCount += indexData.length;
             }
         }
 
@@ -1168,12 +1232,12 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
     }
 
     createConvexMesh(gltf, mesh, scale = vec3.fromValues(1, 1, 1), scaleAxis = quat.create()) {
-        const { vertices, indices } = this.collectVerticesAndIndicesFromMesh(gltf, mesh);
-        return this.createConvexPxMesh(vertices, indices, scale, scaleAxis);
+        const result = this.collectVerticesAndIndicesFromMesh(gltf, mesh, false);
+        return this.createConvexPxMesh(result.vertices, scale, scaleAxis);
     }
 
     createPxMesh(gltf, mesh, scale = vec3.fromValues(1, 1, 1), scaleAxis = quat.create()) {
-        const { vertices, indices } = this.collectVerticesAndIndicesFromMesh(gltf, mesh);
+        const { vertices, indices } = this.collectVerticesAndIndicesFromMesh(gltf, mesh, true);
         const malloc = (f, q) => {
             const nDataBytes = f.length * f.BYTES_PER_ELEMENT;
             if (q === undefined) q = this.PhysX._webidl_malloc(nDataBytes);
