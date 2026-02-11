@@ -1985,7 +1985,10 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         sceneDesc.set_gravity(tmpVec);
         sceneDesc.set_cpuDispatcher(this.PhysX.DefaultCpuDispatcherCreate(0));
         sceneDesc.set_filterShader(this.PhysX.DefaultFilterShader());
-        sceneDesc.flags |= this.PhysX.PxSceneFlagEnum.eENABLE_CCD;
+        const sceneFlags = new this.PhysX.PxSceneFlags(
+            this.PhysX.PxSceneFlagEnum.eENABLE_CCD | this.PhysX.PxSceneFlagEnum.eENABLE_PCM
+        );
+        sceneDesc.flags = sceneFlags;
 
         this.scene = this.physics.createScene(sceneDesc);
         let triggerCallback = undefined;
@@ -2218,7 +2221,7 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
                 }
             } else if (motion && motion.gravityFactor !== 1.0) {
                 const force = new this.PhysX.PxVec3(0, -9.81 * motion.gravityFactor, 0);
-                actor.addForce(force);
+                actor.addForce(force, this.PhysX.PxForceModeEnum.eACCELERATION);
                 this.PhysX.destroy(force);
             }
         }
