@@ -1591,6 +1591,7 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         mat4.getTranslation(nodePosition, node.worldTransform);
         const offsetPosition = vec3.create();
         vec3.subtract(offsetPosition, nodePosition, actorPosition);
+        vec3.transformQuat(offsetPosition, offsetPosition, inverseActorRotation);
 
         return { actor: actor, offsetPosition: offsetPosition, offsetRotation: offsetRotation };
     }
