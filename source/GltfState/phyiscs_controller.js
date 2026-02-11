@@ -2158,59 +2158,63 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
             }
             const motion = node.extensions?.KHR_physics_rigid_bodies?.motion;
             if (motion && motion.isKinematic) {
-                const worldTransform = node.physicsTransform ?? node.worldTransform;
-                const targetPosition = vec3.create();
-                const targetRotation = quat.create();
-                if (motion.linearVelocity !== undefined) {
-                    const linearVelocity = vec3.create();
-                    vec3.scale(linearVelocity, motion.linearVelocity, deltaTime);
-                    targetPosition[0] = worldTransform[12] + linearVelocity[0];
-                    targetPosition[1] = worldTransform[13] + linearVelocity[1];
-                    targetPosition[2] = worldTransform[14] + linearVelocity[2];
-                }
-                if (motion.angularVelocity !== undefined) {
-                    // gl-matrix seems to apply rotations clockwise for positive angles, gltf uses counter-clockwise
-                    const angularVelocity = quat.create();
-                    quat.rotateX(
-                        angularVelocity,
-                        angularVelocity,
-                        -motion.angularVelocity[0] * deltaTime
-                    );
-                    quat.rotateY(
-                        angularVelocity,
-                        angularVelocity,
-                        -motion.angularVelocity[1] * deltaTime
-                    );
-                    quat.rotateZ(
-                        angularVelocity,
-                        angularVelocity,
-                        -motion.angularVelocity[2] * deltaTime
-                    );
-                    let currentRotation = quat.create();
+                if (motion.linearVelocity !== undefined || motion.angularVelocity !== undefined) {
+                    const worldTransform = node.physicsTransform ?? node.worldTransform;
+                    const targetPosition = vec3.create();
+                    targetPosition[0] = worldTransform[12];
+                    targetPosition[1] = worldTransform[13];
+                    targetPosition[2] = worldTransform[14];
+                    let targetRotation = quat.create();
                     if (node.physicsTransform !== undefined) {
-                        mat4.getRotation(currentRotation, worldTransform);
+                        mat4.getRotation(targetRotation, worldTransform);
                     } else {
-                        currentRotation = node.worldQuaternion;
+                        targetRotation = node.worldQuaternion;
                     }
-                    quat.multiply(targetRotation, angularVelocity, currentRotation);
+                    if (motion.linearVelocity !== undefined) {
+                        const linearVelocity = vec3.create();
+                        vec3.scale(linearVelocity, motion.linearVelocity, deltaTime);
+                        targetPosition[0] += linearVelocity[0];
+                        targetPosition[1] += linearVelocity[1];
+                        targetPosition[2] += linearVelocity[2];
+                    }
+                    if (motion.angularVelocity !== undefined) {
+                        // gl-matrix seems to apply rotations clockwise for positive angles, gltf uses counter-clockwise
+                        const angularVelocity = quat.create();
+                        quat.rotateX(
+                            angularVelocity,
+                            angularVelocity,
+                            -motion.angularVelocity[0] * deltaTime
+                        );
+                        quat.rotateY(
+                            angularVelocity,
+                            angularVelocity,
+                            -motion.angularVelocity[1] * deltaTime
+                        );
+                        quat.rotateZ(
+                            angularVelocity,
+                            angularVelocity,
+                            -motion.angularVelocity[2] * deltaTime
+                        );
+                        quat.multiply(targetRotation, angularVelocity, targetRotation);
+                    }
+                    const pos = new this.PhysX.PxVec3(...targetPosition);
+                    const rot = new this.PhysX.PxQuat(...targetRotation);
+                    const transform = new this.PhysX.PxTransform(pos, rot);
+
+                    actor.setKinematicTarget(transform);
+                    this.PhysX.destroy(pos);
+                    this.PhysX.destroy(rot);
+                    this.PhysX.destroy(transform);
+
+                    const physicsTransform = mat4.create();
+                    mat4.fromRotationTranslation(physicsTransform, targetRotation, targetPosition);
+
+                    const scaledPhysicsTransform = mat4.create();
+                    mat4.scale(scaledPhysicsTransform, physicsTransform, node.worldScale);
+
+                    node.physicsTransform = physicsTransform;
+                    node.scaledPhysicsTransform = scaledPhysicsTransform;
                 }
-                const pos = new this.PhysX.PxVec3(...targetPosition);
-                const rot = new this.PhysX.PxQuat(...targetRotation);
-                const transform = new this.PhysX.PxTransform(pos, rot);
-
-                actor.setKinematicTarget(transform);
-                this.PhysX.destroy(pos);
-                this.PhysX.destroy(rot);
-                this.PhysX.destroy(transform);
-
-                const physicsTransform = mat4.create();
-                mat4.fromRotationTranslation(physicsTransform, targetRotation, targetPosition);
-
-                const scaledPhysicsTransform = mat4.create();
-                mat4.scale(scaledPhysicsTransform, physicsTransform, node.worldScale);
-
-                node.physicsTransform = physicsTransform;
-                node.scaledPhysicsTransform = scaledPhysicsTransform;
             } else if (motion && motion.gravityFactor !== 1.0) {
                 const force = new this.PhysX.PxVec3(0, -9.81 * motion.gravityFactor, 0);
                 actor.addForce(force);
