@@ -2226,7 +2226,11 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
             }
         }
 
-        this.scene.simulate(deltaTime);
+        this.scene.simulate(deltaTime / 2);
+        if (!this.scene.fetchResults(true)) {
+            console.warn("PhysX: fetchResults failed");
+        }
+        this.scene.simulate(deltaTime / 2);
         if (!this.scene.fetchResults(true)) {
             console.warn("PhysX: fetchResults failed");
         }
