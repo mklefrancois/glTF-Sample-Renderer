@@ -743,12 +743,23 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
                 !quat.exactEquals(motion.inertiaOrientation, quat.create())
             ) {
                 const intertiaRotMat = mat3.create();
-                mat3.fromQuat(intertiaRotMat, motion.inertiaOrientation);
 
                 const inertiaDiagonalMat = mat3.create();
                 inertiaDiagonalMat[0] = motion.inertiaDiagonal[0];
                 inertiaDiagonalMat[4] = motion.inertiaDiagonal[1];
                 inertiaDiagonalMat[8] = motion.inertiaDiagonal[2];
+
+                if (
+                    quat.length(motion.inertiaOrientation) > 1.0e-5 ||
+                    quat.length(motion.inertiaOrientation) < 1.0e-5
+                ) {
+                    mat3.identity(intertiaRotMat);
+                    console.warn(
+                        "PhysX: Invalid inertia orientation quaternion, ignoring rotation"
+                    );
+                } else {
+                    mat3.fromQuat(intertiaRotMat, motion.inertiaOrientation);
+                }
 
                 const inertiaTensor = mat3.create();
                 mat3.multiply(inertiaTensor, intertiaRotMat, inertiaDiagonalMat);
@@ -777,11 +788,12 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
                 this.PhysX.destroy(col1);
                 this.PhysX.destroy(col2);
                 this.PhysX.destroy(pxInertiaTensor);
+                actor.setMassSpaceInertiaTensor(inertia);
             } else {
                 inertia = new this.PhysX.PxVec3(...motion.inertiaDiagonal);
+                actor.setMassSpaceInertiaTensor(inertia);
+                this.PhysX.destroy(inertia);
             }
-            actor.setMassSpaceInertiaTensor(inertia);
-            this.PhysX.destroy(inertia);
         } else {
             if (motion.mass === undefined) {
                 this.PhysX.PxRigidBodyExt.prototype.updateMassAndInertia(actor, 1.0, pos);
