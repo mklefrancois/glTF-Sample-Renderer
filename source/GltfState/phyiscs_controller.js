@@ -259,11 +259,7 @@ class PhysicsController {
                     }
                     parentRigidBody = node;
                 } else if (currentRigidBody === undefined && rigidBody.collider !== undefined) {
-                    if (animatedNodeIndices.has(node.gltfObjectIndex)) {
-                        this.kinematicActors.push(node);
-                    } else {
-                        this.staticActors.push(node);
-                    }
+                    this.staticActors.push(node);
                 }
                 if (rigidBody.collider?.geometry?.mesh !== undefined) {
                     if (!rigidBody.collider.geometry.convexHull) {
@@ -720,7 +716,7 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
             if (node?.extensions?.KHR_physics_rigid_bodies?.motion?.isKinematic) {
                 actor.setKinematicTarget(pxTransform);
             } else {
-                actor.setGlobalPos(pxTransform);
+                actor.setGlobalPose(pxTransform);
             }
             this.PhysX.destroy(pxPos);
             this.PhysX.destroy(pxRot);
