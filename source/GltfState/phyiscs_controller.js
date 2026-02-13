@@ -543,7 +543,7 @@ class PhysicsController {
     }
 
     rayCast(rayStart, rayEnd) {
-        this.engine.rayCast(rayStart, rayEnd);
+        return this.engine.rayCast(rayStart, rayEnd);
     }
 }
 
@@ -2573,7 +2573,7 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         this.PhysX.destroy(queryFilterData);
 
         if (hasHit) {
-            const hitCount = hit.getNbAnyHits();
+            const hitCount = hitBuffer.getNbAnyHits();
             if (hitCount > 1) {
                 console.warn("Raycast hit multiple objects, only the first hit is returned.");
             }

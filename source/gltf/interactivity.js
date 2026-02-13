@@ -230,6 +230,10 @@ class SampleViewerDecorator extends interactivity.ADecorator {
         this.behaveEngine.startAnimation = this.startAnimation;
         this.behaveEngine.getParentNodeIndex = this.getParentNodeIndex;
 
+        this.behaveEngine.applyImpulseToRigidBody = this.applyImpulseToRigidBody;
+        this.behaveEngine.applyPointImpulseToRigidBody = this.applyPointImpulseToRigidBody;
+        this.behaveEngine.rayCastRigidBodies = this.rayCastRigidBodies;
+
         this.registerBehaveEngineNode("animation/stop", interactivity.AnimationStop);
         this.registerBehaveEngineNode("animation/start", interactivity.AnimationStart);
         this.registerBehaveEngineNode("animation/stopAt", interactivity.AnimationStopAt);
