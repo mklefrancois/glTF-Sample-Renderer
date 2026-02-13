@@ -2272,7 +2272,7 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         for (const [nodeIndex, { actor, pxShapeMap }] of this.nodeToActor.entries()) {
             const node = state.gltf.nodes[nodeIndex];
             const motion = node.extensions?.KHR_physics_rigid_bodies?.motion;
-            if (motion && !motion.isKinematic) {
+            if (motion && !motion.isKinematic && !node.dirtyTransform) {
                 const transform = actor.getGlobalPose();
                 const position = vec3.fromValues(transform.p.x, transform.p.y, transform.p.z);
                 const rotation = quat.fromValues(
