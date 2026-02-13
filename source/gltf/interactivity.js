@@ -1,6 +1,7 @@
 import { GltfObject } from "./gltf_object";
 import * as interactivity from "@khronosgroup/gltf-interactivity-sample-engine";
 import { mat4 } from "gl-matrix";
+import { recurseAllAnimatedProperties } from "./gltf_utils";
 
 class gltfGraph extends GltfObject {
     static animatedProperties = [];
@@ -330,13 +331,7 @@ class SampleViewerDecorator extends interactivity.ADecorator {
         this.behaveEngine.clearScheduledDelays();
         this.behaveEngine.clearValueEvaluationCache();
 
-        const resetAnimatedProperty = (path, propertyName, parent, readOnly) => {
-            if (readOnly) {
-                return;
-            }
-            parent.animatedPropertyObjects[propertyName].rest();
-        };
-        this.recurseAllAnimatedProperties(this.world.gltf, resetAnimatedProperty);
+        this.world.gltf.resetAnimatedProperties();
     }
 
     processNodeStarted(node) {
@@ -452,62 +447,6 @@ class SampleViewerDecorator extends interactivity.ADecorator {
         return currentNode;
     }
 
-    recurseAllAnimatedProperties(gltfObject, callable, currentPath = "") {
-        if (gltfObject === undefined || !(gltfObject instanceof GltfObject)) {
-            return;
-        }
-
-        // Call for all animated properties of this gltfObject
-        for (const property of gltfObject.constructor.animatedProperties) {
-            if (gltfObject[property] === undefined) {
-                continue;
-            }
-            callable(currentPath, property, gltfObject, false);
-        }
-
-        // Call for all read-only animated properties of this gltfObject
-        for (const property of gltfObject.constructor.readOnlyAnimatedProperties) {
-            if (gltfObject[property] === undefined) {
-                continue;
-            }
-            callable(currentPath, property, gltfObject, true);
-        }
-
-        // Recurse into all GltfObject
-        for (const key in gltfObject) {
-            if (gltfObject[key] instanceof GltfObject) {
-                this.recurseAllAnimatedProperties(
-                    gltfObject[key],
-                    callable,
-                    currentPath + "/" + key
-                );
-            } else if (Array.isArray(gltfObject[key])) {
-                if (gltfObject[key].length === 0 || !(gltfObject[key][0] instanceof GltfObject)) {
-                    continue;
-                }
-                for (let i = 0; i < gltfObject[key].length; i++) {
-                    this.recurseAllAnimatedProperties(
-                        gltfObject[key][i],
-                        callable,
-                        currentPath + "/" + key + "/" + i
-                    );
-                }
-            }
-        }
-
-        // Recurse into all extensions
-        for (const extensionName in gltfObject.extensions) {
-            const extension = gltfObject.extensions[extensionName];
-            if (extension instanceof GltfObject) {
-                this.recurseAllAnimatedProperties(
-                    extension,
-                    callable,
-                    currentPath + "/extensions/" + extensionName
-                );
-            }
-        }
-    }
-
     registerKnownPointers() {
         // The engine is checking if a path is valid so we do not need to handle this here
         if (this.world === undefined) {
@@ -586,7 +525,7 @@ class SampleViewerDecorator extends interactivity.ADecorator {
                 false
             );
         };
-        this.recurseAllAnimatedProperties(this.world.gltf, registerFunction);
+        recurseAllAnimatedProperties(this.world.gltf, registerFunction);
 
         // Special pointers that need to be handled manually
 

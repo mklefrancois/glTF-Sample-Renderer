@@ -19,6 +19,7 @@ import { gltfSkin } from "./skin.js";
 import { gltfVariant } from "./variant.js";
 import { gltfGraph } from "./interactivity.js";
 import { KHR_physics_rigid_bodies } from "./rigid_bodies.js";
+import { recurseAllAnimatedProperties } from "./gltf_utils.js";
 
 const allowedExtensions = [
     "KHR_accessor_float64",
@@ -270,6 +271,16 @@ class glTF extends GltfObject {
         }
 
         return nonDisjointAnimations;
+    }
+
+    resetAnimatedProperties() {
+        const resetAnimatedProperty = (path, propertyName, parent, readOnly) => {
+            if (readOnly) {
+                return;
+            }
+            parent.animatedPropertyObjects[propertyName].rest();
+        };
+        recurseAllAnimatedProperties(this, resetAnimatedProperty);
     }
 }
 

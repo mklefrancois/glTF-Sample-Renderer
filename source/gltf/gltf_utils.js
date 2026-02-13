@@ -1,6 +1,7 @@
 import { vec3 } from "gl-matrix";
 import { jsToGl } from "./utils.js";
 import { gltfAccessor } from "./accessor.js";
+import { GltfObject } from "./gltf_object.js";
 
 function getSceneExtents(gltf, sceneIndex, outMin, outMax) {
     for (const i of [0, 1, 2]) {
@@ -212,4 +213,56 @@ function getMorphedNodeIndices(gltf) {
     return morphedNodes;
 }
 
-export { getSceneExtents, getAnimatedIndices, getMorphedNodeIndices };
+function recurseAllAnimatedProperties(gltfObject, callable, currentPath = "") {
+    if (gltfObject === undefined || !(gltfObject instanceof GltfObject)) {
+        return;
+    }
+
+    // Call for all animated properties of this gltfObject
+    for (const property of gltfObject.constructor.animatedProperties) {
+        if (gltfObject[property] === undefined) {
+            continue;
+        }
+        callable(currentPath, property, gltfObject, false);
+    }
+
+    // Call for all read-only animated properties of this gltfObject
+    for (const property of gltfObject.constructor.readOnlyAnimatedProperties) {
+        if (gltfObject[property] === undefined) {
+            continue;
+        }
+        callable(currentPath, property, gltfObject, true);
+    }
+
+    // Recurse into all GltfObject
+    for (const key in gltfObject) {
+        if (gltfObject[key] instanceof GltfObject) {
+            recurseAllAnimatedProperties(gltfObject[key], callable, currentPath + "/" + key);
+        } else if (Array.isArray(gltfObject[key])) {
+            if (gltfObject[key].length === 0 || !(gltfObject[key][0] instanceof GltfObject)) {
+                continue;
+            }
+            for (let i = 0; i < gltfObject[key].length; i++) {
+                recurseAllAnimatedProperties(
+                    gltfObject[key][i],
+                    callable,
+                    currentPath + "/" + key + "/" + i
+                );
+            }
+        }
+    }
+
+    // Recurse into all extensions
+    for (const extensionName in gltfObject.extensions) {
+        const extension = gltfObject.extensions[extensionName];
+        if (extension instanceof GltfObject) {
+            recurseAllAnimatedProperties(
+                extension,
+                callable,
+                currentPath + "/extensions/" + extensionName
+            );
+        }
+    }
+}
+
+export { getSceneExtents, getAnimatedIndices, getMorphedNodeIndices, recurseAllAnimatedProperties };
