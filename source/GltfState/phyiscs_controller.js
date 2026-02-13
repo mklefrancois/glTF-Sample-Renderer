@@ -817,7 +817,6 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         const motion = actorNode.extensions?.KHR_physics_rigid_bodies?.motion;
         const actor = this.nodeToActor.get(actorNode.gltfObjectIndex).actor;
         if (motion.animatedPropertyObjects.isKinematic.dirty) {
-            actor.setRigidBodyFlag(this.PhysX.PxRigidBodyFlagEnum.eKINEMATIC, motion.isKinematic);
             if (motion.isKinematic) {
                 const linearVelocity = actor.getLinearVelocity();
                 motion.computedLinearVelocity = [
@@ -835,6 +834,8 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
                 motion.computedLinearVelocity = undefined;
                 motion.computedAngularVelocity = undefined;
             }
+            actor.setRigidBodyFlag(this.PhysX.PxRigidBodyFlagEnum.eENABLE_CCD, !motion.isKinematic);
+            actor.setRigidBodyFlag(this.PhysX.PxRigidBodyFlagEnum.eKINEMATIC, motion.isKinematic);
         }
         if (motion.animatedPropertyObjects.mass.dirty) {
             actor.setMass(motion.mass);
@@ -1473,7 +1474,10 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
             if (type === "kinematic") {
                 actor.setRigidBodyFlag(this.PhysX.PxRigidBodyFlagEnum.eKINEMATIC, true);
             }
-            actor.setRigidBodyFlag(this.PhysX.PxRigidBodyFlagEnum.eENABLE_CCD, true);
+            actor.setRigidBodyFlag(
+                this.PhysX.PxRigidBodyFlagEnum.eENABLE_CCD,
+                type !== "kinematic"
+            );
             const motion = node.extensions?.KHR_physics_rigid_bodies?.motion;
             if (motion) {
                 const gltfAngularVelocity = motion?.angularVelocity;
@@ -2172,19 +2176,7 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         }
     }
 
-    simulateStep(state, deltaTime) {
-        if (!this.scene) {
-            this.reset = false;
-            return;
-        }
-        if (this.reset === true) {
-            this._resetSimulation();
-            this.reset = false;
-            return;
-        }
-
-        this.changeDebugVisualization();
-
+    subStepSimulation(state, deltaTime) {
         for (const [nodeIndex, { actor, pxShapeMap }] of this.nodeToActor.entries()) {
             const node = state.gltf.nodes[nodeIndex];
             if (node.dirtyTransform) {
@@ -2263,10 +2255,23 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         if (!this.scene.fetchResults(true)) {
             console.warn("PhysX: fetchResults failed");
         }
-        this.scene.simulate(deltaTime / 2);
-        if (!this.scene.fetchResults(true)) {
-            console.warn("PhysX: fetchResults failed");
+    }
+
+    simulateStep(state, deltaTime) {
+        if (!this.scene) {
+            this.reset = false;
+            return;
         }
+        if (this.reset === true) {
+            this._resetSimulation();
+            this.reset = false;
+            return;
+        }
+
+        this.changeDebugVisualization();
+
+        this.subStepSimulation(state, deltaTime / 2);
+        this.subStepSimulation(state, deltaTime / 2);
 
         for (const [nodeIndex, { actor, pxShapeMap }] of this.nodeToActor.entries()) {
             const node = state.gltf.nodes[nodeIndex];
