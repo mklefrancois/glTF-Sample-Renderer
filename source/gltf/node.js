@@ -306,6 +306,11 @@ class KHR_physics_rigid_bodies_motion extends GltfObject {
         this.linearVelocity = [0, 0, 0];
         this.angularVelocity = [0, 0, 0];
         this.gravityFactor = 1;
+
+        // Non glTF
+        // We need to store the computed velocities on switching between kinematic and dynamic.
+        this.computedLinearVelocity = undefined;
+        this.computedAngularVelocity = undefined;
     }
 }
 

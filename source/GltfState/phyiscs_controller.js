@@ -149,7 +149,7 @@ class PhysicsController {
     constructor() {
         this.engine = undefined;
         this.staticActors = [];
-        this.kinematicActors = [];
+        this.kinematicActors = []; // This list is not updated if a dynamic actor is switched to kinematic at runtime
         this.dynamicActors = [];
         this.triggerNodes = [];
         this.compoundTriggerNodes = new Map(); // Map of compound trigger node index to set of included colliders
@@ -818,6 +818,23 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         const actor = this.nodeToActor.get(actorNode.gltfObjectIndex).actor;
         if (motion.animatedPropertyObjects.isKinematic.dirty) {
             actor.setRigidBodyFlag(this.PhysX.PxRigidBodyFlagEnum.eKINEMATIC, motion.isKinematic);
+            if (motion.isKinematic) {
+                const linearVelocity = actor.getLinearVelocity();
+                motion.computedLinearVelocity = [
+                    linearVelocity.x,
+                    linearVelocity.y,
+                    linearVelocity.z
+                ];
+                const angularVelocity = actor.getAngularVelocity();
+                motion.computedAngularVelocity = [
+                    angularVelocity.x,
+                    angularVelocity.y,
+                    angularVelocity.z
+                ];
+            } else {
+                motion.computedLinearVelocity = undefined;
+                motion.computedAngularVelocity = undefined;
+            }
         }
         if (motion.animatedPropertyObjects.mass.dirty) {
             actor.setMass(motion.mass);
@@ -838,10 +855,12 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         if (motion.animatedPropertyObjects.linearVelocity.dirty) {
             const pxVelocity = new this.PhysX.PxVec3(...motion.linearVelocity);
             actor.setLinearVelocity(pxVelocity);
+            motion.computedLinearVelocity = undefined;
         }
         if (motion.animatedPropertyObjects.angularVelocity.dirty) {
             const pxVelocity = new this.PhysX.PxVec3(...motion.angularVelocity);
             actor.setAngularVelocity(pxVelocity);
+            motion.computedAngularVelocity = undefined;
         }
     }
 
@@ -2174,7 +2193,9 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
             }
             const motion = node.extensions?.KHR_physics_rigid_bodies?.motion;
             if (motion && motion.isKinematic) {
-                if (motion.linearVelocity !== undefined || motion.angularVelocity !== undefined) {
+                const linearVelocity = motion.computedLinearVelocity ?? motion.linearVelocity;
+                const angularVelocity = motion.computedAngularVelocity ?? motion.angularVelocity;
+                if (linearVelocity !== undefined || angularVelocity !== undefined) {
                     const worldTransform = node.physicsTransform ?? node.worldTransform;
                     const targetPosition = vec3.create();
                     targetPosition[0] = worldTransform[12];
@@ -2186,32 +2207,32 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
                     } else {
                         targetRotation = node.worldQuaternion;
                     }
-                    if (motion.linearVelocity !== undefined) {
-                        const linearVelocity = vec3.create();
-                        vec3.scale(linearVelocity, motion.linearVelocity, deltaTime);
-                        targetPosition[0] += linearVelocity[0];
-                        targetPosition[1] += linearVelocity[1];
-                        targetPosition[2] += linearVelocity[2];
+                    if (linearVelocity !== undefined) {
+                        const acceleration = vec3.create();
+                        vec3.scale(acceleration, linearVelocity, deltaTime);
+                        targetPosition[0] += acceleration[0];
+                        targetPosition[1] += acceleration[1];
+                        targetPosition[2] += acceleration[2];
                     }
-                    if (motion.angularVelocity !== undefined) {
+                    if (angularVelocity !== undefined) {
                         // gl-matrix seems to apply rotations clockwise for positive angles, gltf uses counter-clockwise
-                        const angularVelocity = quat.create();
+                        const angularAcceleration = quat.create();
                         quat.rotateX(
-                            angularVelocity,
-                            angularVelocity,
-                            -motion.angularVelocity[0] * deltaTime
+                            angularAcceleration,
+                            angularAcceleration,
+                            -angularVelocity[0] * deltaTime
                         );
                         quat.rotateY(
-                            angularVelocity,
-                            angularVelocity,
-                            -motion.angularVelocity[1] * deltaTime
+                            angularAcceleration,
+                            angularAcceleration,
+                            -angularVelocity[1] * deltaTime
                         );
                         quat.rotateZ(
-                            angularVelocity,
-                            angularVelocity,
-                            -motion.angularVelocity[2] * deltaTime
+                            angularAcceleration,
+                            angularAcceleration,
+                            -angularVelocity[2] * deltaTime
                         );
-                        quat.multiply(targetRotation, angularVelocity, targetRotation);
+                        quat.multiply(targetRotation, angularAcceleration, targetRotation);
                     }
                     const pos = new this.PhysX.PxVec3(...targetPosition);
                     const rot = new this.PhysX.PxQuat(...targetRotation);
