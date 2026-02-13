@@ -40,7 +40,7 @@ class GltfObject {
 
     isDirty() {
         for (const prop in this.animatedPropertyObjects) {
-            if (this.animatedPropertyObjects[prop].dirty) {
+            if (this.animatedPropertyObjects[prop]?.dirty) {
                 return true;
             }
         }
@@ -49,7 +49,9 @@ class GltfObject {
 
     resetDirtyFlags() {
         for (const prop in this.animatedPropertyObjects) {
-            this.animatedPropertyObjects[prop].dirty = false;
+            if (this.animatedPropertyObjects[prop]) {
+                this.animatedPropertyObjects[prop].dirty = false;
+            }
         }
     }
 }
