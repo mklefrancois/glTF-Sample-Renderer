@@ -37,6 +37,16 @@ class gltfImplicitShape extends GltfObject {
             this.sphere.fromJson(json.sphere);
         }
     }
+
+    isDirty() {
+        return (
+            (this.plane?.isDirty() ?? false) ||
+            (this.box?.isDirty() ?? false) ||
+            (this.capsule?.isDirty() ?? false) ||
+            (this.cylinder?.isDirty() ?? false) ||
+            (this.sphere?.isDirty() ?? false)
+        );
+    }
 }
 
 class gltfShapeBox extends GltfObject {

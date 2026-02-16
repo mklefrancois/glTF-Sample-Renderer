@@ -916,13 +916,13 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
 
         let currentGeometry = currentShape.getGeometry();
         const currentColliderType = currentGeometry.getType();
-        const shapeIndex = collider?.shape;
+        const shapeIndex = collider?.geometry?.shape;
         let scale = vec3.fromValues(1, 1, 1);
         let scaleAxis = quat.create();
         if (shapeIndex !== undefined) {
             // Simple shapes need to be recreated if scale changed
             // If properties changed we also need to recreate the mesh colliders
-            const dirty = this.simpleShapes[shapeIndex].isDirty();
+            const dirty = gltf.extensions.KHR_implicit_shapes.shapes[shapeIndex].isDirty();
             if (
                 scaleChanged &&
                 !dirty &&
@@ -938,22 +938,16 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
                 scaleAxis = result.scaleAxis;
                 currentGeometry.scale.scale = scale;
                 currentGeometry.scale.rotation = scaleAxis;
-            } else if (
-                !scaleChanged &&
-                dirty &&
-                currentColliderType !== this.PhysX.PxGeometryTypeEnum.eCONVEXMESH
-            ) {
-                // Use geometry from array, if this is a reference we do not need to do anything here since we already updated the array
-            } else {
+            } else if (dirty || scaleChanged) {
                 // Recreate simple shape collider
                 const newGeometry = this.generateSimpleShape(
                     gltf.extensions.KHR_implicit_shapes.shapes[shapeIndex],
                     scale,
                     scaleAxis
                 );
+                currentGeometry.release?.();
                 if (newGeometry.getType() !== currentColliderType) {
                     // We need to recreate the shape
-                    this.PhysX.destroy(currentShape);
                     let shapeFlags = undefined;
                     if (isTrigger) {
                         shapeFlags = this.PhysX.PxShapeFlagEnum.eTRIGGER_SHAPE;
@@ -973,7 +967,7 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
                     result?.pxShapeMap.set(node.gltfObjectIndex, shape);
                     actor.detachShape(currentShape);
                     actor.attachShape(shape);
-                    currentGeometry = newGeometry;
+                    this.PhysX.destroy(currentShape);
                 } else {
                     currentShape.setGeometry(newGeometry);
                 }
@@ -1094,7 +1088,7 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
             return this.createConvexPxMesh(data.vertices, scale, scaleAxis);
         }
         let geometry = undefined;
-        if (referenceType === "eBOX") {
+        if (referenceType === this.PhysX.PxGeometryTypeEnum.eBOX) {
             const halfExtents = new this.PhysX.PxVec3(
                 (x / 2) * scale[0],
                 (y / 2) * scale[1],
@@ -1146,7 +1140,7 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         } else {
             radius *= scale[0];
         }
-        if (referenceType === "eSPHERE") {
+        if (referenceType === this.PhysX.PxGeometryTypeEnum.eSPHERE) {
             reference.radius = radius;
             return undefined;
         }
