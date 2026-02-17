@@ -186,7 +186,8 @@ class PhysicsController {
         this.simulationStepTime = 1 / 60;
         this.timeAccumulator = 0;
         this.pauseTime = undefined;
-        this.skipFrames = 0; // Skip the first two simulation frames to allow engine to initialize
+        this.skipFrames = 2; // Skip the first two simulation frames to allow engine to initialize
+        this.loading = false;
     }
 
     calculateMorphColliders(gltf) {
@@ -256,6 +257,7 @@ class PhysicsController {
             return;
         }
         this.skipFrames = 2;
+        this.loading = true;
         const morphedNodeIndices = getMorphedNodeIndices(state.gltf);
         const result = getAnimatedIndices(state.gltf, "/nodes/", [
             "translation",
@@ -362,6 +364,8 @@ class PhysicsController {
             staticMeshColliderCount,
             dynamicMeshColliderCount
         );
+        this.loading = false;
+        this.simulateStep(state, 0); // Simulate an initial step to ensure everything is up to date before rendering
     }
 
     resetScene() {
@@ -409,6 +413,9 @@ class PhysicsController {
         if (state === undefined) {
             return;
         }
+        if (this.loading) {
+            return;
+        }
         if (this.skipFrames > 0) {
             this.skipFrames -= 1;
             return;
@@ -425,7 +432,7 @@ class PhysicsController {
             this.enabled &&
             this.engine &&
             state &&
-            this.timeAccumulator >= this.simulationStepTime
+            this.timeAccumulator >= this.simulationStepTime * 0.9
         ) {
             this.engine.simulateStep(state, this.timeAccumulator);
             this.timeAccumulator = 0;
@@ -2324,8 +2331,7 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
 
         this.changeDebugVisualization();
 
-        this.subStepSimulation(state, deltaTime / 2);
-        this.subStepSimulation(state, deltaTime / 2);
+        this.subStepSimulation(state, deltaTime);
 
         for (const [nodeIndex, { actor, pxShapeMap }] of this.nodeToActor.entries()) {
             const node = state.gltf.nodes[nodeIndex];
@@ -2443,7 +2449,7 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
     }
 
     getDebugLineData() {
-        if (!this.scene) {
+        if (!this.scene || (this.debugColliders === false && this.debugJoints === false)) {
             return [];
         }
         const result = [];
