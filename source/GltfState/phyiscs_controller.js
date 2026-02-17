@@ -493,7 +493,6 @@ class PhysicsController {
     }
 
     applyAnimations(state) {
-        this.engine.updateSimpleShapes(state.gltf);
         this.engine.updatePhysicMaterials(state.gltf);
 
         for (const actorNode of this.staticActors) {
@@ -638,27 +637,6 @@ class PhysicsInterface {
         }
         for (const shape of gltf.extensions.KHR_implicit_shapes.shapes) {
             this.simpleShapes.push(this.generateSimpleShape(shape));
-        }
-    }
-
-    updateSimpleShapes(gltf) {
-        if (gltf?.extensions?.KHR_implicit_shapes === undefined) {
-            return;
-        }
-        for (let i = 0; i < gltf.extensions.KHR_implicit_shapes.shapes.length; i++) {
-            const shape = gltf.extensions.KHR_implicit_shapes.shapes[i];
-            if (shape.isDirty()) {
-                const newGeometry = this.generateSimpleShape(
-                    shape,
-                    vec3.fromValues(1, 1, 1),
-                    quat.create(),
-                    this.simpleShapes[i]
-                );
-                if (newGeometry !== undefined) {
-                    this.simpleShapes[i].release?.();
-                    this.simpleShapes[i] = newGeometry;
-                }
-            }
         }
     }
 
@@ -2327,7 +2305,7 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
             }
         }
 
-        this.scene.simulate(deltaTime / 2);
+        this.scene.simulate(deltaTime);
         if (!this.scene.fetchResults(true)) {
             console.warn("PhysX: fetchResults failed");
         }
