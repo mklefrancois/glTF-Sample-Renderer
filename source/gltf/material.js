@@ -925,10 +925,10 @@ class KHR_materials_volume extends GltfObject {
 }
 
 class KHR_materials_volume_scatter extends GltfObject {
-    static animatedProperties = ["multiscatterColor", "scatterAnisotropy"];
+    static animatedProperties = ["multiscatterColorFactor", "scatterAnisotropy"];
     constructor() {
         super();
-        this.multiscatterColor = vec3.fromValues(0, 0, 0);
+        this.multiscatterColorFactor = vec3.fromValues(0, 0, 0);
         this.multiscatterColorTexture = undefined;
         this.scatterAnisotropy = 0;
     }
