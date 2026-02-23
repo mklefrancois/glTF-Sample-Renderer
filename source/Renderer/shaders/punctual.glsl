@@ -221,7 +221,7 @@ vec3 getSubsurfaceScattering(vec3 position, mat4 projectionMatrix, vec3 attenuat
         }
     }
     totalWeight = max(totalWeight, vec3(0.0001)); // Avoid division by zero
-    return totalDiffuse / totalWeight * diffuseColor * multiscatterColor * singleScatterColor;
+    return totalDiffuse / totalWeight * diffuseColor;
 
 }
 #endif // MATERIAL_VOLUME_SCATTER
