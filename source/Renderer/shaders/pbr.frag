@@ -552,6 +552,4 @@ vec3 specularTexture = vec3(1.0);
     g_finalColor.rgb = singleScatter;
 #endif
 #endif
-
-#endif
 }
