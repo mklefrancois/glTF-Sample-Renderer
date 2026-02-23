@@ -551,7 +551,6 @@ vec3 specularTexture = vec3(1.0);
 #if DEBUG == DEBUG_VOLUME_SCATTER_SINGLE_SCATTER_COLOR
     g_finalColor.rgb = singleScatter;
 #endif
-#endif
 
 #endif
 }
