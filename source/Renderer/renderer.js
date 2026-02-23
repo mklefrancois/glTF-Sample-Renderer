@@ -934,7 +934,7 @@ class gltfRenderer {
         this.shader.updateUniform("u_SpecularGlossinessUVSet", material.extensions?.KHR_materials_pbrSpecularGlossiness?.specularGlossinessTexture?.texCoord);
         this.shader.updateUniform("u_DiffuseUVSet", material.extensions?.KHR_materials_pbrSpecularGlossiness?.diffuseTexture?.texCoord);
 
-        this.shader.updateUniform("u_MultiScatterColor", jsToGl(material.extensions?.KHR_materials_volume_scatter?.multiscatterColor));
+        this.shader.updateUniform("u_MultiScatterColorFactor", jsToGl(material.extensions?.KHR_materials_volume_scatter?.multiscatterColorFactor));
         this.shader.updateUniform("u_MultiScatterColorUVSet", material.extensions?.KHR_materials_volume_scatter?.multiscatterColorTexture?.texCoord);
     
         let textureIndex = 0;

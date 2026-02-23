@@ -545,10 +545,6 @@ vec3 specularTexture = vec3(1.0);
 
 #ifdef MATERIAL_VOLUME_SCATTER
 #if DEBUG == DEBUG_VOLUME_SCATTER_MULTI_SCATTER_COLOR
-    g_finalColor.rgb = u_MultiScatterColor;
-#ifdef HAS_MULTISCATTER_COLOR_MAP
-    g_finalColor.rgb = linearTosRGB(materialInfo.multiscatterColor);
-#else
     g_finalColor.rgb = materialInfo.multiscatterColor;
 #endif
 #endif

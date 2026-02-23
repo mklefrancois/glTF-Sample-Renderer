@@ -34,7 +34,7 @@ uniform float u_DiffuseTransmissionFactor;
 uniform vec3 u_DiffuseTransmissionColorFactor;
 
 // Volume Scatter
-uniform vec3 u_MultiScatterColor;
+uniform vec3 u_MultiScatterColorFactor;
 
 // Emissive Strength
 uniform float u_EmissiveStrength;
@@ -355,7 +355,7 @@ MaterialInfo getDiffuseTransmissionInfo(MaterialInfo info)
 #ifdef MATERIAL_VOLUME_SCATTER
 MaterialInfo getVolumeScatterInfo(MaterialInfo info)
 {
-    info.multiscatterColor = u_MultiScatterColor;
+    info.multiscatterColor = u_MultiScatterColorFactor;
 
 #ifdef HAS_MULTISCATTER_COLOR_MAP
     info.multiscatterColor *= texture(u_MultiscatterColorSampler, getMultiScatterColorUV()).rgb;
