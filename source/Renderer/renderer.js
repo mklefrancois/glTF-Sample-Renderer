@@ -779,7 +779,6 @@ class gltfRenderer {
         );
 
         // Physics debug view
-        //TODO make optional
         if (state.physicsController.enabled) {
             const lines = state.physicsController.getDebugLineData();
             if (lines.length !== 0) {
@@ -794,8 +793,13 @@ class gltfRenderer {
                 this.shader.updateUniform("u_Color", vec4.fromValues(1.0, 0.0, 0.0, 1.0));
                 const location = this.shader.getAttributeLocation("a_position");
                 if (location !== null) {
-                    const buffer = this.webGl.context.createBuffer();
-                    this.webGl.context.bindBuffer(this.webGl.context.ARRAY_BUFFER, buffer);
+                    if (this.physicsDebugBuffer === undefined) {
+                        this.physicsDebugBuffer = this.webGl.context.createBuffer();
+                    }
+                    this.webGl.context.bindBuffer(
+                        this.webGl.context.ARRAY_BUFFER,
+                        this.physicsDebugBuffer
+                    );
                     this.webGl.context.bufferData(
                         this.webGl.context.ARRAY_BUFFER,
                         new Float32Array(lines),
@@ -813,7 +817,6 @@ class gltfRenderer {
                     this.webGl.context.drawArrays(this.webGl.context.LINES, 0, lines.length / 3);
                     this.webGl.context.disableVertexAttribArray(location);
                     this.webGl.context.bindBuffer(this.webGl.context.ARRAY_BUFFER, null);
-                    this.webGl.context.deleteBuffer(buffer);
                 }
             }
         }

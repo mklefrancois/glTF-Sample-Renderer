@@ -182,7 +182,7 @@ class PhysicsController {
         this.morphWeights = new Map();
 
         this.playing = false;
-        this.enabled = true;
+        this.enabled = false;
         this.simulationStepTime = 1 / 60;
         this.timeAccumulator = 0;
         this.pauseTime = undefined;
@@ -250,10 +250,12 @@ class PhysicsController {
             state.gltf.extensionsUsed === undefined ||
             state.gltf.extensionsUsed.includes("KHR_physics_rigid_bodies") === false
         ) {
+            this.enabled = false;
             return;
         }
         const scene = state.gltf.scenes[sceneIndex];
         if (!scene.nodes) {
+            this.enabled = false;
             return;
         }
         this.skipFrames = 2;
@@ -349,8 +351,10 @@ class PhysicsController {
                 this.dynamicActors.length === 0 &&
                 this.triggerNodes.length === 0)
         ) {
+            this.enabled = false;
             return;
         }
+        this.enabled = true;
         this.engine.initializeSimulation(
             state,
             this.staticActors,

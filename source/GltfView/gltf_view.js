@@ -90,7 +90,14 @@ class GltfView {
         }
 
         this.renderer.drawScene(state, scene);
-        AnimatableProperty.resetAllDirtyFlags();
+
+        // We do not want to reset the dirty flags when the physics simulation is paused, since changes from interactivity would not be applied after resuming the simulation.
+        if (
+            (state.physicsController.playing && state.physicsController.enabled) ||
+            !state.physicsController.enabled
+        ) {
+            state.gltf.resetAllDirtyFlags();
+        }
     }
 
     /**

@@ -20,6 +20,7 @@ import { gltfVariant } from "./variant.js";
 import { gltfGraph } from "./interactivity.js";
 import { KHR_physics_rigid_bodies } from "./rigid_bodies.js";
 import { recurseAllAnimatedProperties } from "./gltf_utils.js";
+import { AnimatableProperty } from "./animatable_property.js";
 
 const allowedExtensions = [
     "KHR_accessor_float64",
@@ -281,6 +282,17 @@ class glTF extends GltfObject {
             parent.animatedPropertyObjects[propertyName].rest();
         };
         recurseAllAnimatedProperties(this, resetAnimatedProperty);
+    }
+
+    /**
+     * Reset all dirty flags to false. This should be called after processing all animatable properties that have their dirty flags set to true.
+     */
+    resetAllDirtyFlags() {
+        AnimatableProperty.resetAllDirtyFlags();
+        for (const node of this.nodes) {
+            node.dirtyScale = false;
+            node.dirtyTransform = false;
+        }
     }
 }
 
