@@ -111,7 +111,7 @@ void main()
     f_diffuse = getDiffuseLight(n) * materialInfo.diffuseTransmissionColorFactor;
         f_diffuse *= materialInfo.diffuseTransmissionFactor;
 #ifdef MATERIAL_VOLUME
-    f_diffuse =  1 - applyVolumeAttenuation(f_diffuse, diffuseTransmissionThickness, materialInfo.attenuationColor, materialInfo.attenuationDistance);
+    f_diffuse =  vec3(1.0) - applyVolumeAttenuation(f_diffuse, diffuseTransmissionThickness, materialInfo.attenuationColor, materialInfo.attenuationDistance);
 #endif
     f_diffuse *= singleScatter;
 
@@ -164,7 +164,7 @@ void main()
         l_diffuse = lightIntensity * NdotL * BRDF_lambertian(materialInfo.diffuseTransmissionColorFactor);
         l_diffuse *= materialInfo.diffuseTransmissionFactor;
 #ifdef MATERIAL_VOLUME
-        l_diffuse =  1 - applyVolumeAttenuation(l_diffuse, diffuseTransmissionThickness, materialInfo.attenuationColor, materialInfo.attenuationDistance);
+        l_diffuse =  vec3(1.0) - applyVolumeAttenuation(l_diffuse, diffuseTransmissionThickness, materialInfo.attenuationColor, materialInfo.attenuationDistance);
         l_diffuse *= singleScatter;
 #endif
         
