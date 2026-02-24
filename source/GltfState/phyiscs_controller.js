@@ -1610,7 +1610,8 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
                 undefined,
                 false,
                 noMeshShapes,
-                shapeFlags
+                shapeFlags,
+                triggerFlags
             );
             collider = node.extensions?.KHR_physics_rigid_bodies?.trigger;
             if (collider !== undefined) {
@@ -1624,6 +1625,7 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
                     undefined,
                     true,
                     true,
+                    shapeFlags,
                     triggerFlags
                 );
             }
@@ -1639,6 +1641,7 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
                 undefined,
                 true,
                 true,
+                shapeFlags,
                 triggerFlags
             );
         }
