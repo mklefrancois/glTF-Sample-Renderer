@@ -1533,7 +1533,8 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
             scaleChanged,
             isTrigger,
             noMeshShapes,
-            flags
+            shapeFlags,
+            triggerFlags
         ) => {
             // Calculate offset position
             const translation = vec3.create();
@@ -1572,7 +1573,7 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
                 gltf,
                 node,
                 collider,
-                flags,
+                isTrigger ? triggerFlags : shapeFlags,
                 material,
                 physXFilterData,
                 noMeshShapes || collider?.geometry?.convexHull === true,
@@ -1652,7 +1653,8 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
                     node,
                     node.dirtyScale,
                     node.dirtyScale,
-                    createAndAddShape
+                    createAndAddShape,
+                    [noMeshShapes, shapeFlags, triggerFlags]
                 );
             }
         }
