@@ -369,6 +369,7 @@ class PhysicsController {
             dynamicMeshColliderCount
         );
         this.loading = false;
+        state.gltf.resetAllDirtyFlags();
         this.simulateStep(state, 0); // Simulate an initial step to ensure everything is up to date before rendering
     }
 
@@ -925,8 +926,12 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
                 const result = PhysicsUtils.calculateScaleAndAxis(node);
                 scale = result.scale;
                 scaleAxis = result.scaleAxis;
-                currentGeometry.scale.scale = scale;
-                currentGeometry.scale.rotation = scaleAxis;
+                const pxScale = new this.PhysX.PxVec3(...scale);
+                const pxRotation = new this.PhysX.PxQuat(...scaleAxis);
+                const meshScale = new this.PhysX.PxMeshScale(pxScale, pxRotation);
+                currentGeometry.scale = meshScale;
+                this.PhysX.destroy(pxScale);
+                this.PhysX.destroy(pxRotation);
             } else if (dirty || scaleChanged) {
                 // Recreate simple shape collider
                 const newGeometry = this.generateSimpleShape(
@@ -961,7 +966,7 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
                     currentShape.setGeometry(newGeometry);
                 }
             }
-        } else if (collider.mesh !== undefined) {
+        } else if (collider?.geometry?.mesh !== undefined) {
             if (scaleChanged) {
                 if (currentColliderType === this.PhysX.PxGeometryTypeEnum.eCONVEXMESH) {
                     currentGeometry = this.PhysX.castObject(
@@ -978,8 +983,12 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
                 const result = PhysicsUtils.calculateScaleAndAxis(node);
                 scale = result.scale;
                 scaleAxis = result.scaleAxis;
-                currentGeometry.scale.scale = scale;
-                currentGeometry.scale.rotation = scaleAxis;
+                const pxScale = new this.PhysX.PxVec3(...scale);
+                const pxRotation = new this.PhysX.PxQuat(...scaleAxis);
+                const meshScale = new this.PhysX.PxMeshScale(pxScale, pxRotation);
+                currentGeometry.scale = meshScale;
+                this.PhysX.destroy(pxScale);
+                this.PhysX.destroy(pxRotation);
             }
         }
         if (offsetChanged) {
