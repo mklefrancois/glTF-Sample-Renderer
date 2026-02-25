@@ -1005,11 +1005,7 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
 
             // Calculate offset rotation
             const rotation = quat.create();
-            const offsetTransform = mat4.create();
-            const inverseShapeTransform = mat4.create();
-            mat4.invert(inverseShapeTransform, actorNode.worldTransform);
-            mat4.multiply(offsetTransform, inverseShapeTransform, worldTransform);
-            mat4.getRotation(rotation, offsetTransform);
+            quat.multiply(rotation, invertedActorRotation, node.worldQuaternion);
 
             const PxPos = new this.PhysX.PxVec3(...translation);
             const PxRotation = new this.PhysX.PxQuat(...rotation);
@@ -1549,11 +1545,7 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
 
             // Calculate offset rotation
             const rotation = quat.create();
-            const offsetTransform = mat4.create();
-            const inverseShapeTransform = mat4.create();
-            mat4.invert(inverseShapeTransform, actorNode.worldTransform);
-            mat4.multiply(offsetTransform, inverseShapeTransform, worldTransform);
-            mat4.getRotation(rotation, offsetTransform);
+            quat.multiply(rotation, invertedActorRotation, node.worldQuaternion);
 
             // Calculate scale and scaleAxis
             const { scale, scaleAxis } = PhysicsUtils.calculateScaleAndAxis(node);
