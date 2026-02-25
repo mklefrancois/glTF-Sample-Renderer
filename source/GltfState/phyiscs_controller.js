@@ -245,7 +245,7 @@ class PhysicsController {
     }
 
     loadScene(state, sceneIndex) {
-        this.resetScene();
+        this.resetScene(state.gltf);
         if (
             state.gltf.extensionsUsed === undefined ||
             state.gltf.extensionsUsed.includes("KHR_physics_rigid_bodies") === false
@@ -373,7 +373,7 @@ class PhysicsController {
         this.simulateStep(state, 0); // Simulate an initial step to ensure everything is up to date before rendering
     }
 
-    resetScene() {
+    resetScene(gltf) {
         this.staticActors = [];
         this.kinematicActors = [];
         this.dynamicActors = [];
@@ -388,6 +388,10 @@ class PhysicsController {
         this.hasRuntimeAnimationTargets = false;
         this.morphWeights.clear();
         this.timeAccumulator = 0;
+        for (const node of gltf?.nodes ?? []) {
+            node.physicsTransform = undefined;
+            node.scaledPhysicsTransform = undefined;
+        }
         if (this.engine) {
             this.engine.resetSimulation();
         }
@@ -681,8 +685,8 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         this.triangleMeshes = [];
 
         // Debug
-        this.debugColliders = true;
-        this.debugJoints = true;
+        this.debugColliders = false;
+        this.debugJoints = false;
         this.debugStateChanged = true;
 
         this.MAX_FLOAT = 3.4028234663852885981170418348452e38;
