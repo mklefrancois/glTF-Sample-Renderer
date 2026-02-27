@@ -597,7 +597,6 @@ class PhysicsInterface {
     generateCylinder(height, radiusTop, radiusBottom, scale, scaleAxis, reference) {}
     generateSphere(radius, scale, scaleAxis, reference) {}
     generatePlane(width, height, doubleSided, scale, scaleAxis, reference) {}
-    //TODO Handle non-uniform scale properly (also for parent nodes)
     generateSimpleShape(
         shape,
         scale = vec3.fromValues(1, 1, 1),
@@ -1671,7 +1670,6 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         let currentNode = node;
         while (currentNode !== undefined) {
             if (this.nodeToActor.has(currentNode.gltfObjectIndex)) {
-                //TODO
                 break;
             }
             currentNode = currentNode.parentNode;
