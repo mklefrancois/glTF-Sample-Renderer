@@ -2268,41 +2268,45 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
                     targetPosition[0] = worldTransform[12];
                     targetPosition[1] = worldTransform[13];
                     targetPosition[2] = worldTransform[14];
-                    let targetRotation = quat.create();
+                    let nodeRotation = quat.create();
                     if (node.physicsTransform !== undefined) {
-                        mat4.getRotation(targetRotation, worldTransform);
+                        mat4.getRotation(nodeRotation, worldTransform);
                     } else {
-                        targetRotation = node.worldQuaternion;
+                        nodeRotation = node.worldQuaternion;
                     }
                     if (linearVelocity !== undefined) {
                         const acceleration = vec3.create();
                         vec3.scale(acceleration, linearVelocity, deltaTime);
+                        vec3.transformQuat(acceleration, acceleration, nodeRotation);
                         targetPosition[0] += acceleration[0];
                         targetPosition[1] += acceleration[1];
                         targetPosition[2] += acceleration[2];
                     }
                     if (angularVelocity !== undefined) {
-                        // gl-matrix seems to apply rotations clockwise for positive angles, gltf uses counter-clockwise
+                        // Transform angular velocity from local space to world space
+                        // by rotating the velocity axes by the current node rotation.
+                        const localX = vec3.fromValues(1, 0, 0);
+                        const localY = vec3.fromValues(0, 1, 0);
+                        const localZ = vec3.fromValues(0, 0, 1);
+                        vec3.transformQuat(localX, localX, nodeRotation);
+                        vec3.transformQuat(localY, localY, nodeRotation);
+                        vec3.transformQuat(localZ, localZ, nodeRotation);
+
                         const angularAcceleration = quat.create();
-                        quat.rotateX(
-                            angularAcceleration,
-                            angularAcceleration,
-                            -angularVelocity[0] * deltaTime
-                        );
-                        quat.rotateY(
-                            angularAcceleration,
-                            angularAcceleration,
-                            -angularVelocity[1] * deltaTime
-                        );
-                        quat.rotateZ(
-                            angularAcceleration,
-                            angularAcceleration,
-                            -angularVelocity[2] * deltaTime
-                        );
-                        quat.multiply(targetRotation, angularAcceleration, targetRotation);
+                        const qX = quat.create();
+                        const qY = quat.create();
+                        const qZ = quat.create();
+                        quat.setAxisAngle(qX, localX, angularVelocity[0] * deltaTime);
+                        quat.setAxisAngle(qY, localY, angularVelocity[1] * deltaTime);
+                        quat.setAxisAngle(qZ, localZ, angularVelocity[2] * deltaTime);
+                        quat.multiply(angularAcceleration, qX, angularAcceleration);
+                        quat.multiply(angularAcceleration, qY, angularAcceleration);
+                        quat.multiply(angularAcceleration, qZ, angularAcceleration);
+
+                        quat.multiply(nodeRotation, angularAcceleration, nodeRotation);
                     }
                     const pos = new this.PhysX.PxVec3(...targetPosition);
-                    const rot = new this.PhysX.PxQuat(...targetRotation);
+                    const rot = new this.PhysX.PxQuat(...nodeRotation);
                     const transform = new this.PhysX.PxTransform(pos, rot);
 
                     actor.setKinematicTarget(transform);
@@ -2311,7 +2315,7 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
                     this.PhysX.destroy(transform);
 
                     const physicsTransform = mat4.create();
-                    mat4.fromRotationTranslation(physicsTransform, targetRotation, targetPosition);
+                    mat4.fromRotationTranslation(physicsTransform, nodeRotation, targetPosition);
 
                     const scaledPhysicsTransform = mat4.create();
                     mat4.scale(scaledPhysicsTransform, physicsTransform, node.worldScale);
