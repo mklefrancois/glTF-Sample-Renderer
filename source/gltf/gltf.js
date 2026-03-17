@@ -274,7 +274,7 @@ class glTF extends GltfObject {
         return nonDisjointAnimations;
     }
 
-    resetAnimatedProperties() {
+    resetAnimatedProperties(sceneIndex = -1) {
         const resetAnimatedProperty = (path, propertyName, parent, readOnly) => {
             if (readOnly) {
                 return;
@@ -282,6 +282,10 @@ class glTF extends GltfObject {
             parent.animatedPropertyObjects[propertyName].rest();
         };
         recurseAllAnimatedProperties(this, resetAnimatedProperty);
+        if (sceneIndex >= 0) {
+            const scene = this.scenes[sceneIndex];
+            scene.applyTransformHierarchy(this);
+        }
     }
 
     /**

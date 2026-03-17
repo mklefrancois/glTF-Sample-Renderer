@@ -31,11 +31,11 @@ class AnimatableProperty {
     }
 
     rest() {
+        if (!this.dirty) {
+            this.dirty = true;
+            AnimatableProperty.dirtyFlagList.push(this);
+        }
         if (this.animatedValue !== null) {
-            if (!this.dirty) {
-                this.dirty = true;
-                AnimatableProperty.dirtyFlagList.push(this);
-            }
             this.animatedValue = null;
         }
     }

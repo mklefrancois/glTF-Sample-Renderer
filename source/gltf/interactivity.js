@@ -335,7 +335,7 @@ class SampleViewerDecorator extends interactivity.ADecorator {
         this.behaveEngine.clearScheduledDelays();
         this.behaveEngine.clearValueEvaluationCache();
 
-        this.world.gltf.resetAnimatedProperties();
+        this.world.gltf.resetAnimatedProperties(this.world.sceneIndex ?? -1);
     }
 
     processNodeStarted(node) {

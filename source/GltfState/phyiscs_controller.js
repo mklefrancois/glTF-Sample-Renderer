@@ -2270,7 +2270,7 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
                     if (node.physicsTransform !== undefined) {
                         mat4.getRotation(nodeRotation, worldTransform);
                     } else {
-                        nodeRotation = node.worldQuaternion;
+                        nodeRotation = quat.clone(node.worldQuaternion);
                     }
                     if (linearVelocity !== undefined) {
                         const acceleration = vec3.create();
