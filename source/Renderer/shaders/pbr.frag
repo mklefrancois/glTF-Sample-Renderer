@@ -151,10 +151,18 @@ void main()
 #endif
 #endif
 
+#ifdef MATERIAL_VOLUME
+    vec3 extinction_coff = -log(materialInfo.attenuationColor) / materialInfo.attenuationDistance;
+    vec3 absorption_coff = extinction_coff;
+    vec3 scatter_coff = vec3(0.0);
 #ifdef MATERIAL_VOLUME_SCATTER
     // Used for weighting absorption and scattering
     vec3 singleScatter = multiToSingleScatter(materialInfo.multiscatterColor);
+    absorption_coff = extinction_coff * (1.0 - singleScatter);
+    scatter_coff = extinction_coff * singleScatter;
 #endif
+#endif
+
 
 #ifdef MATERIAL_CLEARCOAT
     clearcoatFactor = materialInfo.clearcoatFactor;
@@ -171,9 +179,6 @@ void main()
     diffuseTransmissionIBL = getDiffuseLight(-n) * materialInfo.diffuseTransmissionColorFactor;
 #ifdef MATERIAL_VOLUME
         diffuseTransmissionIBL = applyVolumeAttenuation(diffuseTransmissionIBL, diffuseTransmissionThickness, materialInfo.attenuationColor, materialInfo.attenuationDistance);
-#endif
-#ifdef MATERIAL_VOLUME_SCATTER
-    diffuseTransmissionIBL *= (1.0 - singleScatter);
 #endif
     f_diffuse = mix(f_diffuse, diffuseTransmissionIBL, materialInfo.diffuseTransmissionFactor);
 #endif
@@ -291,9 +296,6 @@ void main()
 #ifdef MATERIAL_VOLUME
             l_diffuse_btdf = applyVolumeAttenuation(l_diffuse_btdf, diffuseTransmissionThickness, materialInfo.attenuationColor, materialInfo.attenuationDistance);
 #endif
-#ifdef MATERIAL_VOLUME_SCATTER
-            l_diffuse_btdf *= (1.0 - singleScatter);
-#endif
             l_diffuse += l_diffuse_btdf * materialInfo.diffuseTransmissionFactor;
         }
         
@@ -355,7 +357,7 @@ void main()
 
 #ifdef MATERIAL_VOLUME_SCATTER
         // Subsurface scattering is calculated based on fresnel weighted diffuse terms. 
-        vec3 l_color = getSubsurfaceScattering(v_Position, u_ProjectionMatrix, materialInfo.attenuationDistance * materialInfo.attenuationColor, u_ScatterFramebufferSampler, materialInfo.diffuseTransmissionColorFactor, materialInfo.multiscatterColor);
+        vec3 l_color = getSubsurfaceScattering(v_Position, u_ProjectionMatrix, 1.0 / extinction_coff, u_ScatterFramebufferSampler, materialInfo.diffuseTransmissionColorFactor, singleScatter);
         color += l_color * (1.0 - materialInfo.metallic) * (1.0 - clearcoatFactor * clearcoatFresnel) * (1.0 - materialInfo.iridescenceFactor) * (1.0 - materialInfo.transmissionFactor);
 #endif // MATERIAL_VOLUME_SCATTER
 
