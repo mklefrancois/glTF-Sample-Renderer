@@ -673,7 +673,7 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         this.scene = undefined;
         this.nodeToActor = new Map();
         this.nodeToMotion = new Map();
-        this.nodeToJoint = new Map();
+        this.nodeToSimplifiedJoints = new Map();
         this.shapeToNode = new Map();
         this.filterData = [];
         this.physXFilterData = [];
@@ -1018,42 +1018,55 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
     }
 
     updatePhysicsJoint(state, jointNode) {
-        const pxJoint = this.nodeToJoint.get(jointNode.gltfObjectIndex);
-        if (pxJoint === undefined) {
+        const pxJoints = this.nodeToSimplifiedJoints.get(jointNode.gltfObjectIndex);
+        if (pxJoints === undefined) {
             return;
         }
-        const jointIndex = jointNode.extensions?.KHR_physics_rigid_bodies?.joint?.joint;
-        const gltfJoint = state.gltf.extensions.KHR_physics_rigid_bodies.physicsJoints[jointIndex];
-        if (
-            jointNode.extensions.KHR_physics_rigid_bodies.joint.animatedPropertyObjects
-                .enableCollision.dirty
-        ) {
-            pxJoint.setConstraintFlag(
-                this.PhysX.PxConstraintFlagEnum.eCOLLISION_ENABLED,
-                jointNode.extensions.KHR_physics_rigid_bodies.joint.enableCollision
+        const gltfJoint =
+            state.gltf.extensions.KHR_physics_rigid_bodies.physicsJoints[
+                jointNode.extensions.KHR_physics_rigid_bodies.joint.joint
+            ];
+        const simplifiedJoints = gltfJoint.simplifiedPhysicsJoints;
+        if (simplifiedJoints.length !== pxJoints.length) {
+            console.warn(
+                "Number of simplified joints does not match number of PhysX joints. Skipping joint update."
             );
+            return;
         }
-        for (const limit of gltfJoint.limits) {
-            if (limit.animatedPropertyObjects.min.dirty) {
+        for (let i = 0; i < simplifiedJoints.length; i++) {
+            const pxJoint = pxJoints[i];
+            const simplifiedJoint = simplifiedJoints[i];
+            if (
+                jointNode.extensions.KHR_physics_rigid_bodies.joint.animatedPropertyObjects
+                    .enableCollision.dirty
+            ) {
+                pxJoint.setConstraintFlag(
+                    this.PhysX.PxConstraintFlagEnum.eCOLLISION_ENABLED,
+                    jointNode.extensions.KHR_physics_rigid_bodies.joint.enableCollision
+                );
             }
-            if (limit.animatedPropertyObjects.max.dirty) {
+            for (const limit of simplifiedJoint.limits) {
+                if (limit.animatedPropertyObjects.min.dirty) {
+                }
+                if (limit.animatedPropertyObjects.max.dirty) {
+                }
+                if (limit.animatedPropertyObjects.stiffness.dirty) {
+                }
+                if (limit.animatedPropertyObjects.damping.dirty) {
+                }
             }
-            if (limit.animatedPropertyObjects.stiffness.dirty) {
-            }
-            if (limit.animatedPropertyObjects.damping.dirty) {
-            }
-        }
 
-        for (const drive of gltfJoint.drives) {
-            if (drive.animatedPropertyObjects.stiffness.dirty) {
-            }
-            if (drive.animatedPropertyObjects.damping.dirty) {
-            }
-            if (drive.animatedPropertyObjects.maxForce.dirty) {
-            }
-            if (drive.animatedPropertyObjects.positionTarget.dirty) {
-            }
-            if (drive.animatedPropertyObjects.velocityTarget.dirty) {
+            for (const drive of simplifiedJoint.drives) {
+                if (drive.animatedPropertyObjects.stiffness.dirty) {
+                }
+                if (drive.animatedPropertyObjects.damping.dirty) {
+                }
+                if (drive.animatedPropertyObjects.maxForce.dirty) {
+                }
+                if (drive.animatedPropertyObjects.positionTarget.dirty) {
+                }
+                if (drive.animatedPropertyObjects.velocityTarget.dirty) {
+                }
             }
         }
     }
@@ -1745,8 +1758,10 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
             const limit1 = joint.swingLimit1;
             const limit2 = joint.swingLimit2;
 
-            const isSymmetric1 = Math.abs(limit1.min + limit1.max) < 1e-6; // Centered around 0
-            const isSymmetric2 = Math.abs(limit2.min + limit2.max) < 1e-6;
+            const isSymmetric1 =
+                Math.abs(limit1.min + limit1.max) < 1e-6 || limit1.min === undefined; // Centered around 0
+            const isSymmetric2 =
+                Math.abs(limit2.min + limit2.max) < 1e-6 || limit2.min === undefined;
 
             // Return if this is a cone limit (symmetric and same range) vs pyramid limit
             return isSymmetric1 && isSymmetric2;
@@ -1763,11 +1778,19 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
             console.error("Referenced joint not found:", joint.joint);
             return;
         }
+        const simplifiedJoints = [];
+        for (const simplifiedJoint of referencedJoint.simplifiedPhysicsJoints) {
+            const physxJoint = this.createSimplifiedJoint(gltf, node, joint, simplifiedJoint);
+            simplifiedJoints.push(physxJoint);
+        }
+        this.nodeToSimplifiedJoints.set(node.gltfObjectIndex, simplifiedJoints);
+    }
 
-        const resultA = this.computeJointOffsetAndActor(node, referencedJoint);
+    createSimplifiedJoint(gltf, node, joint, simplifiedJoint) {
+        const resultA = this.computeJointOffsetAndActor(node, simplifiedJoint);
         const resultB = this.computeJointOffsetAndActor(
             gltf.nodes[joint.connectedNode],
-            referencedJoint
+            simplifiedJoint
         );
 
         const pos = new this.PhysX.PxVec3(...resultA.offsetPosition);
@@ -1799,8 +1822,6 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
             this.debugJoints
         );
 
-        this.nodeToJoint.set(node.gltfObjectIndex, physxJoint);
-
         physxJoint.setConstraintFlag(
             this.PhysX.PxConstraintFlagEnum.eCOLLISION_ENABLED,
             joint.enableCollision
@@ -1814,17 +1835,22 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         physxJoint.setMotion(this.PhysX.PxD6AxisEnum.eSWING1, this.PhysX.PxD6MotionEnum.eFREE);
         physxJoint.setMotion(this.PhysX.PxD6AxisEnum.eSWING2, this.PhysX.PxD6MotionEnum.eFREE);
 
-        for (const limit of referencedJoint.limits) {
+        for (const limit of simplifiedJoint.limits) {
             const lock = limit.min === 0 && limit.max === 0;
             const spring = new this.PhysX.PxSpring(limit.stiffness ?? 0, limit.damping);
-            if (limit.linearAxes && limit.linearAxes.length > 0) {
+            const isDistanceLimit =
+                limit.linearAxes &&
+                limit.linearAxes.length === 3 &&
+                (limit.min === undefined || limit.min === 0) &&
+                limit.max !== 0;
+            if (limit.linearAxes && limit.linearAxes.length > 0 && !isDistanceLimit) {
                 const linearLimitPair = new this.PhysX.PxJointLinearLimitPair(
                     limit.min ?? -this.MAX_FLOAT,
                     limit.max ?? this.MAX_FLOAT,
                     spring
                 );
                 for (const axis of limit.linearAxes) {
-                    const result = referencedJoint.getRotatedAxisAndSign(axis);
+                    const result = simplifiedJoint.getRotatedAxisAndSign(axis);
                     const physxAxis = this.convertAxisIndexToEnum(result.axis, "linear");
                     physxJoint.setMotion(
                         physxAxis,
@@ -1838,9 +1864,29 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
                 }
                 this.PhysX.destroy(linearLimitPair);
             }
+            if (isDistanceLimit) {
+                const linearLimit = new this.PhysX.PxJointLinearLimit(
+                    limit.max ?? this.MAX_FLOAT,
+                    spring
+                );
+                physxJoint.setMotion(
+                    this.PhysX.PxD6AxisEnum.eX,
+                    this.PhysX.PxD6MotionEnum.eLIMITED
+                );
+                physxJoint.setMotion(
+                    this.PhysX.PxD6AxisEnum.eY,
+                    this.PhysX.PxD6MotionEnum.eLIMITED
+                );
+                physxJoint.setMotion(
+                    this.PhysX.PxD6AxisEnum.eZ,
+                    this.PhysX.PxD6MotionEnum.eLIMITED
+                );
+                physxJoint.setDistanceLimit(linearLimit);
+                this.PhysX.destroy(linearLimit);
+            }
             if (limit.angularAxes && limit.angularAxes.length > 0) {
                 for (const axis of limit.angularAxes) {
-                    const result = referencedJoint.getRotatedAxisAndSign(axis);
+                    const result = simplifiedJoint.getRotatedAxisAndSign(axis);
                     const physxAxis = this.convertAxisIndexToEnum(result.axis, "angular");
                     physxJoint.setMotion(
                         physxAxis,
@@ -1853,14 +1899,14 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
             this.PhysX.destroy(spring);
         }
 
-        if (referencedJoint.twistLimit !== undefined) {
-            if (!(referencedJoint.twistLimit.min === 0 && referencedJoint.twistLimit.max === 0)) {
+        if (simplifiedJoint.twistLimit !== undefined) {
+            if (!(simplifiedJoint.twistLimit.min === 0 && simplifiedJoint.twistLimit.max === 0)) {
                 const limitPair = new this.PhysX.PxJointAngularLimitPair(
-                    referencedJoint.twistLimit.min ?? -Math.PI,
-                    referencedJoint.twistLimit.max ?? Math.PI,
+                    simplifiedJoint.twistLimit.min ?? -Math.PI,
+                    simplifiedJoint.twistLimit.max ?? Math.PI,
                     new this.PhysX.PxSpring(
-                        referencedJoint.twistLimit.stiffness ?? 0,
-                        referencedJoint.twistLimit.damping
+                        simplifiedJoint.twistLimit.stiffness ?? 0,
+                        simplifiedJoint.twistLimit.damping
                     )
                 );
                 physxJoint.setTwistLimit(limitPair);
@@ -1869,39 +1915,39 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         }
 
         if (
-            referencedJoint.swingLimit1 !== undefined &&
-            referencedJoint.swingLimit2 !== undefined
+            simplifiedJoint.swingLimit1 !== undefined &&
+            simplifiedJoint.swingLimit2 !== undefined
         ) {
             if (
-                referencedJoint.swingLimit1.stiffness !== referencedJoint.swingLimit2.stiffness ||
-                referencedJoint.swingLimit1.damping !== referencedJoint.swingLimit2.damping
+                simplifiedJoint.swingLimit1.stiffness !== simplifiedJoint.swingLimit2.stiffness ||
+                simplifiedJoint.swingLimit1.damping !== simplifiedJoint.swingLimit2.damping
             ) {
                 console.warn(
                     "PhysX does not support different stiffness/damping for swing limits."
                 );
             } else {
                 const spring = new this.PhysX.PxSpring(
-                    referencedJoint.swingLimit1.stiffness ?? 0,
-                    referencedJoint.swingLimit1.damping
+                    simplifiedJoint.swingLimit1.stiffness ?? 0,
+                    simplifiedJoint.swingLimit1.damping
                 );
                 let yMin = -Math.PI / 2;
                 let yMax = Math.PI / 2;
                 let zMin = -Math.PI / 2;
                 let zMax = Math.PI / 2;
-                if (referencedJoint.swingLimit1.min !== undefined) {
-                    yMin = referencedJoint.swingLimit1.min;
+                if (simplifiedJoint.swingLimit1.min !== undefined) {
+                    yMin = simplifiedJoint.swingLimit1.min;
                 }
-                if (referencedJoint.swingLimit1.max !== undefined) {
-                    yMax = referencedJoint.swingLimit1.max;
+                if (simplifiedJoint.swingLimit1.max !== undefined) {
+                    yMax = simplifiedJoint.swingLimit1.max;
                 }
-                if (referencedJoint.swingLimit2.min !== undefined) {
-                    zMin = referencedJoint.swingLimit2.min;
+                if (simplifiedJoint.swingLimit2.min !== undefined) {
+                    zMin = simplifiedJoint.swingLimit2.min;
                 }
-                if (referencedJoint.swingLimit2.max !== undefined) {
-                    zMax = referencedJoint.swingLimit2.max;
+                if (simplifiedJoint.swingLimit2.max !== undefined) {
+                    zMax = simplifiedJoint.swingLimit2.max;
                 }
 
-                const isSymmetric = this.validateSwingLimits(referencedJoint);
+                const isSymmetric = this.validateSwingLimits(simplifiedJoint);
                 if (yMin === 0 && yMax === 0 && zMin === 0 && zMax === 0) {
                     // Fixed limit is already set
                 } else if (isSymmetric) {
@@ -1928,10 +1974,10 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
                 this.PhysX.destroy(spring);
             }
         } else if (
-            referencedJoint.swingLimit1 !== undefined ||
-            referencedJoint.swingLimit2 !== undefined
+            simplifiedJoint.swingLimit1 !== undefined ||
+            simplifiedJoint.swingLimit2 !== undefined
         ) {
-            const singleLimit = referencedJoint.swingLimit1 ?? referencedJoint.swingLimit2;
+            const singleLimit = simplifiedJoint.swingLimit1 ?? simplifiedJoint.swingLimit2;
             if (singleLimit.min === 0 && singleLimit.max === 0) {
                 // Fixed limit is already set
             } else if (singleLimit.min && -1 * singleLimit.min !== singleLimit.max) {
@@ -1943,8 +1989,8 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
                     singleLimit.stiffness ?? 0,
                     singleLimit.damping
                 );
-                const maxY = referencedJoint.swingLimit1?.max ?? Math.PI;
-                const maxZ = referencedJoint.swingLimit2?.max ?? Math.PI;
+                const maxY = simplifiedJoint.swingLimit1?.max ?? Math.PI;
+                const maxZ = simplifiedJoint.swingLimit2?.max ?? Math.PI;
                 const jointLimitCone = new this.PhysX.PxJointLimitCone(maxY, maxZ, spring);
                 physxJoint.setSwingLimit(jointLimitCone);
                 this.PhysX.destroy(spring);
@@ -1957,44 +2003,56 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         const linearVelocityTarget = vec3.fromValues(0, 0, 0);
         const angularVelocityTarget = vec3.fromValues(0, 0, 0);
 
-        for (const drive of referencedJoint.drives) {
+        for (const drive of simplifiedJoint.drives) {
             const physxDrive = new this.PhysX.PxD6JointDrive(
                 drive.stiffness,
                 drive.damping,
                 drive.maxForce ?? this.MAX_FLOAT,
                 drive.mode === "acceleration"
             );
-            const result = referencedJoint.getRotatedAxisAndSign(drive.axis);
+            const result = simplifiedJoint.getRotatedAxisAndSign(drive.axis);
             if (drive.type === "linear") {
                 const axis = this.convertAxisIndexToEnum(result.axis, "linear");
                 physxJoint.setDrive(axis, physxDrive);
                 if (drive.positionTarget !== undefined) {
-                    positionTarget[result.axis] = drive.positionTarget;
+                    positionTarget[result.axis] = drive.positionTarget * result.sign;
                 }
                 if (drive.velocityTarget !== undefined) {
-                    linearVelocityTarget[result.axis] = drive.velocityTarget;
+                    linearVelocityTarget[result.axis] = drive.velocityTarget * result.sign;
                 }
             } else if (drive.type === "angular") {
                 if (drive.positionTarget !== undefined) {
                     // gl-matrix seems to apply rotations clockwise for positive angles, gltf uses counter-clockwise
                     switch (result.axis) {
                         case 0: {
-                            quat.rotateX(angleTarget, angleTarget, -drive.positionTarget);
+                            quat.rotateX(
+                                angleTarget,
+                                angleTarget,
+                                -drive.positionTarget * result.sign
+                            );
                             break;
                         }
                         case 1: {
-                            quat.rotateY(angleTarget, angleTarget, -drive.positionTarget);
+                            quat.rotateY(
+                                angleTarget,
+                                angleTarget,
+                                -drive.positionTarget * result.sign
+                            );
                             break;
                         }
                         case 2: {
-                            quat.rotateZ(angleTarget, angleTarget, -drive.positionTarget);
+                            quat.rotateZ(
+                                angleTarget,
+                                angleTarget,
+                                -drive.positionTarget * result.sign
+                            );
                             break;
                         }
                     }
                 }
 
                 if (drive.velocityTarget !== undefined) {
-                    angularVelocityTarget[result.axis] = drive.velocityTarget;
+                    angularVelocityTarget[result.axis] = drive.velocityTarget * result.sign * -1; // PhysX angular velocity is in opposite direction of rotation
                 }
 
                 const axis = this.convertAxisIndexToAngularDriveEnum(result.axis);
@@ -2047,11 +2105,13 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
             this.debugJoints ? 1 : 0
         );
         this.scene.setVisualizationParameter(this.PhysX.eJOINT_LIMITS, this.debugJoints ? 1 : 0);
-        for (const joint of this.nodeToJoint.values()) {
-            joint.setConstraintFlag(
-                this.PhysX.PxConstraintFlagEnum.eVISUALIZATION,
-                this.debugJoints
-            );
+        for (const joints of this.nodeToSimplifiedJoints.values()) {
+            for (const joint of joints) {
+                joint.setConstraintFlag(
+                    this.PhysX.PxConstraintFlagEnum.eVISUALIZATION,
+                    this.debugJoints
+                );
+            }
         }
         for (const shapePtr of this.shapeToNode.keys()) {
             const shape = this.PhysX.wrapPointer(shapePtr, this.PhysX.PxShape);
@@ -2456,10 +2516,12 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         }
         this.triangleMeshes = [];
 
-        for (const joint of this.nodeToJoint.values()) {
-            joint.release();
+        for (const joints of this.nodeToSimplifiedJoints.values()) {
+            for (const joint of joints) {
+                joint.release();
+            }
         }
-        this.nodeToJoint.clear();
+        this.nodeToSimplifiedJoints.clear();
 
         for (const actor of this.nodeToActor.values()) {
             actor.actor.release();

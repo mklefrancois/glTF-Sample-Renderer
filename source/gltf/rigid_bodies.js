@@ -41,19 +41,64 @@ class gltfCollisionFilter extends GltfObject {
     }
 }
 
-class gltfPhysicsJoint extends GltfObject {
-    static animatedProperties = [];
-    constructor() {
-        super();
-        this.limits = [];
-        this.drives = [];
+class simplifiedPhysicsJoint {
+    constructor(limits, drives) {
+        this.limits = limits;
+        this.drives = drives;
 
-        // non glTF
         this.twistLimit = undefined;
         this.swingLimit1 = undefined;
         this.swingLimit2 = undefined;
         this.localRotation = quat.create();
         this.twistAxis = 0; // 0 = X, 1 = Y, 2 = Z
+        this.isCylindrical = false;
+
+        const freeAxes = new Set([0, 1, 2]);
+        const limitAxes = new Map();
+        const fixedAxes = new Map();
+
+        for (const limit of this.limits) {
+            if (limit.angularAxes !== undefined) {
+                for (const axis of limit.angularAxes) {
+                    if (limit.min === 0 && limit.max === 0) {
+                        fixedAxes.set(axis, limit);
+                    } else {
+                        limitAxes.set(axis, limit);
+                    }
+                    freeAxes.delete(axis);
+                }
+                if (limit.angularAxes.length > 1) {
+                    this.isCylindrical = true;
+                }
+            }
+        }
+
+        // Handle cylindrical joints (cone/ellipse limits)
+        if (this.isCylindrical) {
+            this._handleCylindricalLimits(limitAxes, fixedAxes);
+            return;
+        }
+
+        if (freeAxes.size === 0) {
+            // All axes are constrained
+            if (limitAxes.size === 0) {
+                // All axes are fixed (locked)
+                this.twistLimit = fixedAxes.get(0);
+                this.swingLimit1 = fixedAxes.get(1);
+                this.swingLimit2 = fixedAxes.get(2);
+            } else {
+                // Mix of fixed and limited axes
+                this._handleMixedConstraints(limitAxes, fixedAxes);
+            }
+        } else if (freeAxes.size === 1) {
+            // Two axes are constrained, one is free
+            const freeAxis = Array.from(freeAxes)[0];
+            this._handleTwoConstrainedAxes(limitAxes, fixedAxes, freeAxis);
+        } else if (freeAxes.size === 2) {
+            // One axis is constrained, two are free
+            const constrainedAxis = [0, 1, 2].find((axis) => !freeAxes.has(axis));
+            this._handleOneConstrainedAxis(limitAxes, fixedAxes, constrainedAxis);
+        }
     }
 
     getRotatedAxisAndSign(axis) {
@@ -84,72 +129,6 @@ class gltfPhysicsJoint extends GltfObject {
             }
         }
         return result;
-    }
-
-    fromJson(json) {
-        super.fromJson(json);
-        this.limits = objectsFromJsons(json.limits, gltfPhysicsJointLimit);
-        this.drives = objectsFromJsons(json.drives, gltfPhysicsJointDrive);
-
-        const freeAxes = new Set([0, 1, 2]);
-        const limitAxes = new Map();
-        const fixedAxes = new Map();
-        let isCylinderical = false;
-
-        for (const limit of this.limits) {
-            if (limit.angularAxes !== undefined) {
-                for (const axis of limit.angularAxes) {
-                    if (limit.min === 0 && limit.max === 0) {
-                        if (fixedAxes.has(axis)) {
-                            console.warn(
-                                `Joint ${this.name}: Multiple limits on the same axis ${axis} is not supported.`
-                            );
-                        } else {
-                            fixedAxes.set(axis, limit);
-                        }
-                    } else {
-                        if (limitAxes.has(axis)) {
-                            console.warn(
-                                `Joint ${this.name}: Multiple limits on the same axis ${axis} is not supported.`
-                            );
-                        } else {
-                            limitAxes.set(axis, limit);
-                        }
-                    }
-                    freeAxes.delete(axis);
-                }
-                if (limit.angularAxes.length > 1) {
-                    isCylinderical = true;
-                }
-            }
-        }
-
-        // Handle cylindrical joints (cone/ellipse limits)
-        if (isCylinderical) {
-            this._handleCylindricalLimits(limitAxes, fixedAxes);
-            return;
-        }
-
-        if (freeAxes.size === 0) {
-            // All axes are constrained
-            if (limitAxes.size === 0) {
-                // All axes are fixed (locked)
-                this.twistLimit = fixedAxes.get(0);
-                this.swingLimit1 = fixedAxes.get(1);
-                this.swingLimit2 = fixedAxes.get(2);
-            } else {
-                // Mix of fixed and limited axes
-                this._handleMixedConstraints(limitAxes, fixedAxes);
-            }
-        } else if (freeAxes.size === 1) {
-            // Two axes are constrained, one is free
-            const freeAxis = Array.from(freeAxes)[0];
-            this._handleTwoConstrainedAxes(limitAxes, fixedAxes, freeAxis);
-        } else if (freeAxes.size === 2) {
-            // One axis is constrained, two are free
-            const constrainedAxis = [0, 1, 2].find((axis) => !freeAxes.has(axis));
-            this._handleOneConstrainedAxis(limitAxes, fixedAxes, constrainedAxis);
-        }
     }
 
     _handleMixedConstraints(limitAxes, fixedAxes) {
@@ -257,6 +236,92 @@ class gltfPhysicsJoint extends GltfObject {
                 }
                 break;
             }
+        }
+    }
+}
+
+class gltfPhysicsJoint extends GltfObject {
+    static animatedProperties = [];
+    constructor() {
+        super();
+        this.limits = [];
+        this.drives = [];
+
+        // non glTF
+        this.simplifiedPhysicsJoints = [];
+    }
+
+    _getUniqueDrives(drivesCopy) {
+        const definedLinearDrives = new Set();
+        const definedAngularDrives = new Set();
+        const result = [];
+        for (let i = drivesCopy.length - 1; i >= 0; i--) {
+            if (drivesCopy[i].type === "linear" && definedLinearDrives.has(drivesCopy[i].axis)) {
+                continue;
+            }
+            if (drivesCopy[i].type === "angular" && definedAngularDrives.has(drivesCopy[i].axis)) {
+                continue;
+            }
+            if (drivesCopy[i].type === "linear") {
+                definedLinearDrives.add(drivesCopy[i].axis);
+                result.push(drivesCopy[i]);
+                drivesCopy.splice(i, 1);
+            } else {
+                definedAngularDrives.add(drivesCopy[i].axis);
+                result.push(drivesCopy[i]);
+                drivesCopy.splice(i, 1);
+            }
+        }
+        return result;
+    }
+
+    fromJson(json) {
+        super.fromJson(json);
+        this.limits = objectsFromJsons(json.limits, gltfPhysicsJointLimit);
+        this.drives = objectsFromJsons(json.drives, gltfPhysicsJointDrive);
+
+        const definedLinearAxes = new Set();
+        const definedAngularAxes = new Set();
+        let currentLimits = [];
+        const drivesCopy = this.drives.slice();
+
+        let needToCreateNewJoint = false;
+        for (const limit of this.limits) {
+            for (const axis of limit.angularAxes || []) {
+                if (definedAngularAxes.has(axis)) {
+                    needToCreateNewJoint = true;
+                }
+            }
+            for (const axis of limit.linearAxes || []) {
+                if (definedLinearAxes.has(axis)) {
+                    needToCreateNewJoint = true;
+                }
+            }
+            if (needToCreateNewJoint) {
+                const drives = this._getUniqueDrives(drivesCopy);
+                this.simplifiedPhysicsJoints.push(
+                    new simplifiedPhysicsJoint(currentLimits, drives)
+                );
+                currentLimits = [];
+                definedLinearAxes.clear();
+                definedAngularAxes.clear();
+                needToCreateNewJoint = false;
+            }
+            currentLimits.push(limit);
+            for (const axis of limit.angularAxes || []) {
+                definedAngularAxes.add(axis);
+            }
+            for (const axis of limit.linearAxes || []) {
+                definedLinearAxes.add(axis);
+            }
+        }
+        if (currentLimits.length > 0) {
+            const drives = this._getUniqueDrives(drivesCopy);
+            this.simplifiedPhysicsJoints.push(new simplifiedPhysicsJoint(currentLimits, drives));
+        }
+        while (drivesCopy.length > 0) {
+            const drives = this._getUniqueDrives(drivesCopy);
+            this.simplifiedPhysicsJoints.push(new simplifiedPhysicsJoint([], drives));
         }
     }
 }
