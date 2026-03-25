@@ -1046,27 +1046,73 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
                 );
             }
             for (const limit of simplifiedJoint.limits) {
-                if (limit.animatedPropertyObjects.min.dirty) {
-                }
-                if (limit.animatedPropertyObjects.max.dirty) {
-                }
-                if (limit.animatedPropertyObjects.stiffness.dirty) {
-                }
-                if (limit.animatedPropertyObjects.damping.dirty) {
+                if (
+                    limit.animatedPropertyObjects.min.dirty ||
+                    limit.animatedPropertyObjects.max.dirty ||
+                    limit.animatedPropertyObjects.stiffness.dirty ||
+                    limit.animatedPropertyObjects.damping.dirty
+                ) {
+                    this._setLimitValues(pxJoint, simplifiedJoint, limit);
                 }
             }
 
+            if (
+                simplifiedJoint.twistLimit &&
+                (simplifiedJoint.twistLimit.animatedPropertyObjects.min.dirty ||
+                    simplifiedJoint.twistLimit.animatedPropertyObjects.max.dirty ||
+                    simplifiedJoint.twistLimit.animatedPropertyObjects.stiffness.dirty ||
+                    simplifiedJoint.twistLimit.animatedPropertyObjects.damping.dirty)
+            ) {
+                this._setTwistLimitValues(pxJoint, simplifiedJoint);
+            }
+
+            if (
+                (simplifiedJoint.swingLimit1 &&
+                    (simplifiedJoint.swingLimit1.animatedPropertyObjects.min.dirty ||
+                        simplifiedJoint.swingLimit1.animatedPropertyObjects.max.dirty ||
+                        simplifiedJoint.swingLimit1.animatedPropertyObjects.stiffness.dirty ||
+                        simplifiedJoint.swingLimit1.animatedPropertyObjects.damping.dirty)) ||
+                (simplifiedJoint.swingLimit2 &&
+                    (simplifiedJoint.swingLimit2.animatedPropertyObjects.min.dirty ||
+                        simplifiedJoint.swingLimit2.animatedPropertyObjects.max.dirty ||
+                        simplifiedJoint.swingLimit2.animatedPropertyObjects.stiffness.dirty ||
+                        simplifiedJoint.swingLimit2.animatedPropertyObjects.damping.dirty))
+            ) {
+                this._setSwingLimitValues(pxJoint, simplifiedJoint);
+            }
+
+            let positionTargetDirty = false;
+            let velocityTargetDirty = false;
+            const linearVelocityTarget = new this.PhysX.PxVec3(0, 0, 0);
+            const angularVelocityTarget = new this.PhysX.PxVec3(0, 0, 0);
+            pxJoint.getDriveVelocity(linearVelocityTarget, angularVelocityTarget);
             for (const drive of simplifiedJoint.drives) {
-                if (drive.animatedPropertyObjects.stiffness.dirty) {
-                }
-                if (drive.animatedPropertyObjects.damping.dirty) {
-                }
-                if (drive.animatedPropertyObjects.maxForce.dirty) {
-                }
-                if (drive.animatedPropertyObjects.positionTarget.dirty) {
+                if (
+                    drive.animatedPropertyObjects.stiffness.dirty ||
+                    drive.animatedPropertyObjects.damping.dirty ||
+                    drive.animatedPropertyObjects.maxForce.dirty
+                ) {
+                    this._setDriveValues(pxJoint, simplifiedJoint, drive);
                 }
                 if (drive.animatedPropertyObjects.velocityTarget.dirty) {
+                    this._getDriveVelocityTarget(
+                        simplifiedJoint,
+                        drive,
+                        linearVelocityTarget,
+                        angularVelocityTarget
+                    );
+                    velocityTargetDirty = true;
                 }
+                if (drive.animatedPropertyObjects.positionTarget.dirty) {
+                    positionTargetDirty = true;
+                }
+            }
+
+            if (positionTargetDirty) {
+                this._setDrivePositionTarget(pxJoint, simplifiedJoint);
+            }
+            if (velocityTargetDirty) {
+                pxJoint.setDriveVelocity(linearVelocityTarget, angularVelocityTarget);
             }
         }
     }
@@ -1786,119 +1832,58 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         this.nodeToSimplifiedJoints.set(node.gltfObjectIndex, simplifiedJoints);
     }
 
-    createSimplifiedJoint(gltf, node, joint, simplifiedJoint) {
-        const resultA = this.computeJointOffsetAndActor(node, simplifiedJoint);
-        const resultB = this.computeJointOffsetAndActor(
-            gltf.nodes[joint.connectedNode],
-            simplifiedJoint
-        );
-
-        const pos = new this.PhysX.PxVec3(...resultA.offsetPosition);
-        const rot = new this.PhysX.PxQuat(...resultA.offsetRotation);
-        const poseA = new this.PhysX.PxTransform(pos, rot);
-        this.PhysX.destroy(pos);
-        this.PhysX.destroy(rot);
-
-        const posB = new this.PhysX.PxVec3(...resultB.offsetPosition);
-        const rotB = new this.PhysX.PxQuat(...resultB.offsetRotation);
-        const poseB = new this.PhysX.PxTransform(posB, rotB);
-        this.PhysX.destroy(posB);
-        this.PhysX.destroy(rotB);
-
-        const physxJoint = this.PhysX.PxTopLevelFunctions.prototype.D6JointCreate(
-            this.physics,
-            resultA.actor,
-            poseA,
-            resultB.actor,
-            poseB
-        );
-        this.PhysX.destroy(poseA);
-        this.PhysX.destroy(poseB);
-
-        physxJoint.setAngularDriveConfig(this.PhysX.PxD6AngularDriveConfigEnum.eSWING_TWIST);
-
-        physxJoint.setConstraintFlag(
-            this.PhysX.PxConstraintFlagEnum.eVISUALIZATION,
-            this.debugJoints
-        );
-
-        physxJoint.setConstraintFlag(
-            this.PhysX.PxConstraintFlagEnum.eCOLLISION_ENABLED,
-            joint.enableCollision
-        );
-
-        // Do not restict any axis by default
-        physxJoint.setMotion(this.PhysX.PxD6AxisEnum.eX, this.PhysX.PxD6MotionEnum.eFREE);
-        physxJoint.setMotion(this.PhysX.PxD6AxisEnum.eY, this.PhysX.PxD6MotionEnum.eFREE);
-        physxJoint.setMotion(this.PhysX.PxD6AxisEnum.eZ, this.PhysX.PxD6MotionEnum.eFREE);
-        physxJoint.setMotion(this.PhysX.PxD6AxisEnum.eTWIST, this.PhysX.PxD6MotionEnum.eFREE);
-        physxJoint.setMotion(this.PhysX.PxD6AxisEnum.eSWING1, this.PhysX.PxD6MotionEnum.eFREE);
-        physxJoint.setMotion(this.PhysX.PxD6AxisEnum.eSWING2, this.PhysX.PxD6MotionEnum.eFREE);
-
-        for (const limit of simplifiedJoint.limits) {
-            const lock = limit.min === 0 && limit.max === 0;
-            const spring = new this.PhysX.PxSpring(limit.stiffness ?? 0, limit.damping);
-            const isDistanceLimit =
-                limit.linearAxes &&
-                limit.linearAxes.length === 3 &&
-                (limit.min === undefined || limit.min === 0) &&
-                limit.max !== 0;
-            if (limit.linearAxes && limit.linearAxes.length > 0 && !isDistanceLimit) {
-                const linearLimitPair = new this.PhysX.PxJointLinearLimitPair(
-                    limit.min ?? -this.MAX_FLOAT,
-                    limit.max ?? this.MAX_FLOAT,
-                    spring
-                );
-                for (const axis of limit.linearAxes) {
-                    const result = simplifiedJoint.getRotatedAxisAndSign(axis);
-                    const physxAxis = this.convertAxisIndexToEnum(result.axis, "linear");
-                    physxJoint.setMotion(
-                        physxAxis,
-                        lock
-                            ? this.PhysX.PxD6MotionEnum.eLOCKED
-                            : this.PhysX.PxD6MotionEnum.eLIMITED
-                    );
-                    if (!lock) {
-                        physxJoint.setLinearLimit(physxAxis, linearLimitPair);
-                    }
-                }
-                this.PhysX.destroy(linearLimitPair);
-            }
-            if (isDistanceLimit) {
-                const linearLimit = new this.PhysX.PxJointLinearLimit(
-                    limit.max ?? this.MAX_FLOAT,
-                    spring
-                );
+    _setLimitValues(physxJoint, simplifiedJoint, limit) {
+        const lock = limit.min === 0 && limit.max === 0;
+        const spring = new this.PhysX.PxSpring(limit.stiffness ?? 0, limit.damping);
+        const isDistanceLimit =
+            limit.linearAxes &&
+            limit.linearAxes.length === 3 &&
+            (limit.min === undefined || limit.min === 0) &&
+            limit.max !== 0;
+        if (limit.linearAxes && limit.linearAxes.length > 0 && !isDistanceLimit) {
+            const linearLimitPair = new this.PhysX.PxJointLinearLimitPair(
+                limit.min ?? -this.MAX_FLOAT,
+                limit.max ?? this.MAX_FLOAT,
+                spring
+            );
+            for (const axis of limit.linearAxes) {
+                const result = simplifiedJoint.getRotatedAxisAndSign(axis);
+                const physxAxis = this.convertAxisIndexToEnum(result.axis, "linear");
                 physxJoint.setMotion(
-                    this.PhysX.PxD6AxisEnum.eX,
-                    this.PhysX.PxD6MotionEnum.eLIMITED
+                    physxAxis,
+                    lock ? this.PhysX.PxD6MotionEnum.eLOCKED : this.PhysX.PxD6MotionEnum.eLIMITED
                 );
-                physxJoint.setMotion(
-                    this.PhysX.PxD6AxisEnum.eY,
-                    this.PhysX.PxD6MotionEnum.eLIMITED
-                );
-                physxJoint.setMotion(
-                    this.PhysX.PxD6AxisEnum.eZ,
-                    this.PhysX.PxD6MotionEnum.eLIMITED
-                );
-                physxJoint.setDistanceLimit(linearLimit);
-                this.PhysX.destroy(linearLimit);
-            }
-            if (limit.angularAxes && limit.angularAxes.length > 0) {
-                for (const axis of limit.angularAxes) {
-                    const result = simplifiedJoint.getRotatedAxisAndSign(axis);
-                    const physxAxis = this.convertAxisIndexToEnum(result.axis, "angular");
-                    physxJoint.setMotion(
-                        physxAxis,
-                        lock
-                            ? this.PhysX.PxD6MotionEnum.eLOCKED
-                            : this.PhysX.PxD6MotionEnum.eLIMITED
-                    );
+                if (!lock) {
+                    physxJoint.setLinearLimit(physxAxis, linearLimitPair);
                 }
             }
-            this.PhysX.destroy(spring);
+            this.PhysX.destroy(linearLimitPair);
         }
+        if (isDistanceLimit) {
+            const linearLimit = new this.PhysX.PxJointLinearLimit(
+                limit.max ?? this.MAX_FLOAT,
+                spring
+            );
+            physxJoint.setMotion(this.PhysX.PxD6AxisEnum.eX, this.PhysX.PxD6MotionEnum.eLIMITED);
+            physxJoint.setMotion(this.PhysX.PxD6AxisEnum.eY, this.PhysX.PxD6MotionEnum.eLIMITED);
+            physxJoint.setMotion(this.PhysX.PxD6AxisEnum.eZ, this.PhysX.PxD6MotionEnum.eLIMITED);
+            physxJoint.setDistanceLimit(linearLimit);
+            this.PhysX.destroy(linearLimit);
+        }
+        if (limit.angularAxes && limit.angularAxes.length > 0) {
+            for (const axis of limit.angularAxes) {
+                const result = simplifiedJoint.getRotatedAxisAndSign(axis);
+                const physxAxis = this.convertAxisIndexToEnum(result.axis, "angular");
+                physxJoint.setMotion(
+                    physxAxis,
+                    lock ? this.PhysX.PxD6MotionEnum.eLOCKED : this.PhysX.PxD6MotionEnum.eLIMITED
+                );
+            }
+        }
+        this.PhysX.destroy(spring);
+    }
 
+    _setTwistLimitValues(physxJoint, simplifiedJoint) {
         if (simplifiedJoint.twistLimit !== undefined) {
             if (!(simplifiedJoint.twistLimit.min === 0 && simplifiedJoint.twistLimit.max === 0)) {
                 const limitPair = new this.PhysX.PxJointAngularLimitPair(
@@ -1913,7 +1898,9 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
                 this.PhysX.destroy(limitPair);
             }
         }
+    }
 
+    _setSwingLimitValues(physxJoint, simplifiedJoint) {
         if (
             simplifiedJoint.swingLimit1 !== undefined &&
             simplifiedJoint.swingLimit2 !== undefined
@@ -1997,28 +1984,47 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
                 this.PhysX.destroy(jointLimitCone);
             }
         }
+    }
 
+    _setDriveValues(physxJoint, simplifiedJoint, drive) {
+        const physxDrive = new this.PhysX.PxD6JointDrive(
+            drive.stiffness,
+            drive.damping,
+            drive.maxForce ?? this.MAX_FLOAT,
+            drive.mode === "acceleration"
+        );
+        const result = simplifiedJoint.getRotatedAxisAndSign(drive.axis);
+        if (drive.type === "linear") {
+            const axis = this.convertAxisIndexToEnum(result.axis, "linear");
+            physxJoint.setDrive(axis, physxDrive);
+        } else if (drive.type === "angular") {
+            const axis = this.convertAxisIndexToAngularDriveEnum(result.axis);
+            physxJoint.setDrive(axis, physxDrive);
+        }
+        this.PhysX.destroy(physxDrive);
+    }
+
+    _getDriveVelocityTarget(simplifiedJoint, drive, linearVelocityTarget, angularVelocityTarget) {
+        const result = simplifiedJoint.getRotatedAxisAndSign(drive.axis);
+        if (drive.type === "linear") {
+            if (drive.velocityTarget !== undefined) {
+                linearVelocityTarget[result.axis] = drive.velocityTarget * result.sign;
+            }
+        } else if (drive.type === "angular") {
+            if (drive.velocityTarget !== undefined) {
+                angularVelocityTarget[result.axis] = drive.velocityTarget * result.sign * -1; // PhysX angular velocity is in opposite direction of rotation
+            }
+        }
+    }
+
+    _setDrivePositionTarget(physxJoint, simplifiedJoint) {
         const positionTarget = vec3.fromValues(0, 0, 0);
         const angleTarget = quat.create();
-        const linearVelocityTarget = vec3.fromValues(0, 0, 0);
-        const angularVelocityTarget = vec3.fromValues(0, 0, 0);
-
         for (const drive of simplifiedJoint.drives) {
-            const physxDrive = new this.PhysX.PxD6JointDrive(
-                drive.stiffness,
-                drive.damping,
-                drive.maxForce ?? this.MAX_FLOAT,
-                drive.mode === "acceleration"
-            );
             const result = simplifiedJoint.getRotatedAxisAndSign(drive.axis);
             if (drive.type === "linear") {
-                const axis = this.convertAxisIndexToEnum(result.axis, "linear");
-                physxJoint.setDrive(axis, physxDrive);
                 if (drive.positionTarget !== undefined) {
                     positionTarget[result.axis] = drive.positionTarget * result.sign;
-                }
-                if (drive.velocityTarget !== undefined) {
-                    linearVelocityTarget[result.axis] = drive.velocityTarget * result.sign;
                 }
             } else if (drive.type === "angular") {
                 if (drive.positionTarget !== undefined) {
@@ -2050,31 +2056,92 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
                         }
                     }
                 }
-
-                if (drive.velocityTarget !== undefined) {
-                    angularVelocityTarget[result.axis] = drive.velocityTarget * result.sign * -1; // PhysX angular velocity is in opposite direction of rotation
-                }
-
-                const axis = this.convertAxisIndexToAngularDriveEnum(result.axis);
-                physxJoint.setDrive(axis, physxDrive);
             }
-            this.PhysX.destroy(physxDrive);
         }
-
         const posTarget = new this.PhysX.PxVec3(...positionTarget);
         const rotTarget = new this.PhysX.PxQuat(...angleTarget);
         const targetTransform = new this.PhysX.PxTransform(posTarget, rotTarget);
         physxJoint.setDrivePosition(targetTransform);
+        this.PhysX.destroy(posTarget);
+        this.PhysX.destroy(rotTarget);
+        this.PhysX.destroy(targetTransform);
+    }
+
+    createSimplifiedJoint(gltf, node, joint, simplifiedJoint) {
+        const resultA = this.computeJointOffsetAndActor(node, simplifiedJoint);
+        const resultB = this.computeJointOffsetAndActor(
+            gltf.nodes[joint.connectedNode],
+            simplifiedJoint
+        );
+
+        const pos = new this.PhysX.PxVec3(...resultA.offsetPosition);
+        const rot = new this.PhysX.PxQuat(...resultA.offsetRotation);
+        const poseA = new this.PhysX.PxTransform(pos, rot);
+        this.PhysX.destroy(pos);
+        this.PhysX.destroy(rot);
+
+        const posB = new this.PhysX.PxVec3(...resultB.offsetPosition);
+        const rotB = new this.PhysX.PxQuat(...resultB.offsetRotation);
+        const poseB = new this.PhysX.PxTransform(posB, rotB);
+        this.PhysX.destroy(posB);
+        this.PhysX.destroy(rotB);
+
+        const physxJoint = this.PhysX.PxTopLevelFunctions.prototype.D6JointCreate(
+            this.physics,
+            resultA.actor,
+            poseA,
+            resultB.actor,
+            poseB
+        );
+        this.PhysX.destroy(poseA);
+        this.PhysX.destroy(poseB);
+
+        physxJoint.setAngularDriveConfig(this.PhysX.PxD6AngularDriveConfigEnum.eSWING_TWIST);
+
+        physxJoint.setConstraintFlag(
+            this.PhysX.PxConstraintFlagEnum.eVISUALIZATION,
+            this.debugJoints
+        );
+
+        physxJoint.setConstraintFlag(
+            this.PhysX.PxConstraintFlagEnum.eCOLLISION_ENABLED,
+            joint.enableCollision
+        );
+
+        // Do not restict any axis by default
+        physxJoint.setMotion(this.PhysX.PxD6AxisEnum.eX, this.PhysX.PxD6MotionEnum.eFREE);
+        physxJoint.setMotion(this.PhysX.PxD6AxisEnum.eY, this.PhysX.PxD6MotionEnum.eFREE);
+        physxJoint.setMotion(this.PhysX.PxD6AxisEnum.eZ, this.PhysX.PxD6MotionEnum.eFREE);
+        physxJoint.setMotion(this.PhysX.PxD6AxisEnum.eTWIST, this.PhysX.PxD6MotionEnum.eFREE);
+        physxJoint.setMotion(this.PhysX.PxD6AxisEnum.eSWING1, this.PhysX.PxD6MotionEnum.eFREE);
+        physxJoint.setMotion(this.PhysX.PxD6AxisEnum.eSWING2, this.PhysX.PxD6MotionEnum.eFREE);
+
+        for (const limit of simplifiedJoint.limits) {
+            this._setLimitValues(physxJoint, simplifiedJoint, limit);
+        }
+
+        this._setTwistLimitValues(physxJoint, simplifiedJoint);
+        this._setSwingLimitValues(physxJoint, simplifiedJoint);
+
+        const linearVelocityTarget = vec3.fromValues(0, 0, 0);
+        const angularVelocityTarget = vec3.fromValues(0, 0, 0);
+
+        for (const drive of simplifiedJoint.drives) {
+            this._setDriveValues(physxJoint, simplifiedJoint, drive);
+            this._getDriveVelocityTarget(
+                simplifiedJoint,
+                drive,
+                linearVelocityTarget,
+                angularVelocityTarget
+            );
+        }
+        this._setDrivePositionTarget(physxJoint, simplifiedJoint);
 
         const linVel = new this.PhysX.PxVec3(...linearVelocityTarget);
         const angVel = new this.PhysX.PxVec3(...angularVelocityTarget);
         physxJoint.setDriveVelocity(linVel, angVel);
-
-        this.PhysX.destroy(posTarget);
-        this.PhysX.destroy(rotTarget);
         this.PhysX.destroy(linVel);
         this.PhysX.destroy(angVel);
-        this.PhysX.destroy(targetTransform);
 
         return physxJoint;
     }
