@@ -6,6 +6,10 @@ class PhysicsInterface {
         this.simpleShapes = [];
     }
 
+    // Functions to be implemented by physics engine wrappers
+
+    // Start functions from PhysicsController
+
     async initializeEngine() {}
     initializeSimulation(
         state,
@@ -20,10 +24,8 @@ class PhysicsInterface {
         staticMeshColliderCount,
         dynamicMeshColliderCount
     ) {}
-    pauseSimulation() {}
-    resumeSimulation() {}
     resetSimulation() {}
-    stopSimulation() {}
+    simulateStep(state, deltaTime) {}
     enableDebugColliders(enable) {}
     enableDebugJoints(enable) {}
 
@@ -31,11 +33,45 @@ class PhysicsInterface {
     applyPointImpulse(nodeIndex, impulse, position) {}
     rayCast(rayStart, rayEnd) {}
 
-    generateBox(x, y, z, scale, scaleAxis, reference) {}
-    generateCapsule(height, radiusTop, radiusBottom, scale, scaleAxis, reference) {}
-    generateCylinder(height, radiusTop, radiusBottom, scale, scaleAxis, reference) {}
-    generateSphere(radius, scale, scaleAxis, reference) {}
-    generatePlane(width, height, doubleSided, scale, scaleAxis, reference) {}
+    updateActorTransform(node) {}
+    updatePhysicsJoint(state, jointNode) {}
+    updatePhysicsMaterials(gltf) {}
+    updateCollider(
+        gltf,
+        node,
+        collider,
+        actorNode,
+        worldTransform,
+        offsetChanged,
+        scaleChanged,
+        isTrigger
+    ) {}
+    updateMotion(actorNode) {}
+
+    // End functions from PhysicsController
+
+    generateSimpleShapes(gltf) {
+        this.simpleShapes = [];
+        if (gltf?.extensions?.KHR_implicit_shapes === undefined) {
+            return;
+        }
+        for (const shape of gltf.extensions.KHR_implicit_shapes.shapes) {
+            this.simpleShapes.push(this.generateSimpleShape(shape));
+        }
+    }
+
+    /**
+     * Generates a simple physics shape based on the provided gltfImplicitShape.
+     * The scale and scaleAxis parameters should be used to apply additional scaling to the shape.
+     * The reference parameter can be used to update an already existing shape instead of creating a new one,
+     * if the physics engine supports it.
+     *
+     * @param {gltfImplicitShape} shape
+     * @param {vec3} scale
+     * @param {quat} scaleAxis
+     * @param {any | undefined} reference
+     * @returns
+     */
     generateSimpleShape(
         shape,
         scale = vec3.fromValues(1, 1, 1),
@@ -73,29 +109,15 @@ class PhysicsInterface {
             case "sphere":
                 return this.generateSphere(shape.sphere.radius, scale, scaleAxis, reference);
             case "plane":
-                return this.generatePlane(
-                    shape.plane.width,
-                    shape.plane.height,
-                    shape.plane.doubleSided,
-                    scale,
-                    scaleAxis,
-                    reference
-                );
+                return this.generatePlane(reference);
         }
     }
 
-    generateSimpleShapes(gltf) {
-        this.simpleShapes = [];
-        if (gltf?.extensions?.KHR_implicit_shapes === undefined) {
-            return;
-        }
-        for (const shape of gltf.extensions.KHR_implicit_shapes.shapes) {
-            this.simpleShapes.push(this.generateSimpleShape(shape));
-        }
-    }
-
-    updateActorTransform(node) {}
-    updatePhysicsJoint(state, jointNode) {}
+    generateBox(x, y, z, scale, scaleAxis, reference) {}
+    generateCapsule(height, radiusTop, radiusBottom, scale, scaleAxis, reference) {}
+    generateCylinder(height, radiusTop, radiusBottom, scale, scaleAxis, reference) {}
+    generateSphere(radius, scale, scaleAxis, reference) {}
+    generatePlane(reference) {}
 }
 
 export { PhysicsInterface };

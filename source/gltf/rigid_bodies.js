@@ -41,6 +41,15 @@ class gltfCollisionFilter extends GltfObject {
     }
 }
 
+/**
+ * glTF allows defining multiple limits and drives for a joint,which can lead
+ * to complex combinations of constraints that are not directly supported by
+ * common physics engines. The simplifiedPhysicsJoint class takes the limits
+ * and drives defined in a gltfPhysicsJoint and simplifies them into one or
+ * more sets of constraints that can be more easily implemented in a physics engine.
+ * Each simplifiedPhysicsJoint represents a single set of constraints (e.g., one twist limit and two swing limits)
+ * along with the necessary local rotation to align the joint's axes with the physics engine's expected axes.
+ */
 class simplifiedPhysicsJoint {
     constructor(limits, drives) {
         this.limits = limits;
@@ -101,6 +110,12 @@ class simplifiedPhysicsJoint {
         }
     }
 
+    /**
+     * Input the glTF defined axis and get the corresponding axis and sign
+     * after applying the local rotation to always align twist with the X-axis.
+     * @param {number} axis
+     * @returns {{axis: number, sign: number}}
+     */
     getRotatedAxisAndSign(axis) {
         let result = {
             axis: axis,
@@ -215,6 +230,7 @@ class simplifiedPhysicsJoint {
     _handleCylindricalLimits(limitAxes, fixedAxes) {
         // Handle limits that constrain multiple axes together (cone/ellipse)
         // Find the limit that affects multiple axes
+        // eslint-disable-next-line no-unused-vars
         for (const [axis, limit] of limitAxes.entries()) {
             if (limit.angularAxes && limit.angularAxes.length > 1) {
                 // This is a cone/ellipse limit
@@ -285,6 +301,7 @@ class gltfPhysicsJoint extends GltfObject {
         let currentLimits = [];
         const drivesCopy = this.drives.slice();
 
+        // If multiple limits affect the same axis, we create separate simplified joints for each combination of constraints.
         let needToCreateNewJoint = false;
         for (const limit of this.limits) {
             for (const axis of limit.angularAxes || []) {
@@ -315,10 +332,13 @@ class gltfPhysicsJoint extends GltfObject {
                 definedLinearAxes.add(axis);
             }
         }
+        // Add remaining limits and drives as a simplified joint
         if (currentLimits.length > 0) {
             const drives = this._getUniqueDrives(drivesCopy);
             this.simplifiedPhysicsJoints.push(new simplifiedPhysicsJoint(currentLimits, drives));
         }
+
+        // If there are any drives left that were not included in the previous joints, we create a new simplified joint for them without limits.
         while (drivesCopy.length > 0) {
             const drives = this._getUniqueDrives(drivesCopy);
             this.simplifiedPhysicsJoints.push(new simplifiedPhysicsJoint([], drives));

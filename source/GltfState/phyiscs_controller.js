@@ -28,6 +28,7 @@ class PhysicsController {
         this.loading = false;
     }
 
+    // Morphing colliders was dropped from the spec, but we keep the code here in case we want to add support for it in the future.
     calculateMorphColliders(gltf) {
         for (const node of this.morphedColliders) {
             const mesh = gltf.meshes[node.mesh];
@@ -75,6 +76,11 @@ class PhysicsController {
         }
     }
 
+    /**
+     * Initializes the physics engine. This must be called before loading any scenes.
+     * Currently, only "NvidiaPhysX" is supported.
+     * @param {string} engine
+     */
     async initializeEngine(engine) {
         if (engine === "NvidiaPhysX") {
             this.engine = new NvidiaPhysicsInterface();
@@ -82,6 +88,13 @@ class PhysicsController {
         }
     }
 
+    /**
+     * Resets the current physics state and loads the physics data for a given scene and initializes the physics simulation.
+     * The first two frames of the simulation are skipped to allow the physics engine to initialize before applying any physics updates.
+     * Resets all dirty flags.
+     * @param {GltfState} state
+     * @param {number} sceneIndex
+     */
     loadScene(state, sceneIndex) {
         this.resetScene(state.gltf);
         if (
@@ -212,6 +225,10 @@ class PhysicsController {
         this.simulateStep(state, 0); // Simulate an initial step to ensure everything is up to date before rendering
     }
 
+    /**
+     * Resets the current physics state.
+     * @param {glTF} gltf
+     */
     resetScene(gltf) {
         this.staticActors = [];
         this.kinematicActors = [];
@@ -236,27 +253,34 @@ class PhysicsController {
         }
     }
 
-    stopSimulation() {
-        this.playing = false;
-        this.enabled = false;
-        if (this.engine) {
-            this.engine.stopSimulation();
-        }
-    }
-
+    /**
+     * Resumes the physics simulation if it was paused. If the simulation is not paused, this function does nothing.
+     */
     resumeSimulation() {
-        if (this.engine) {
-            this.enabled = true;
+        if (this.engine && this.enabled) {
             this.playing = true;
         }
     }
 
+    /**
+     * Pauses the physics simulation. If the simulation is already paused, this function does nothing.
+     */
     pauseSimulation() {
-        this.pauseTime = performance.now();
-        this.enabled = true;
-        this.playing = false;
+        if (this.engine && this.enabled && this.playing) {
+            this.pauseTime = performance.now();
+            this.playing = false;
+        }
     }
 
+    /**
+     * Simulates a single step of the physics simulation,
+     * if the initial loading is done.
+     * A step will only be simulated if enough time has passed since the last simulated step,
+     * based on the configured simulation step time.
+     * Can also be used to manually advance the simulation when it is paused, in this case simulationStepTime is used as deltaTime.
+     * @param {GltfState} state
+     * @param {number} deltaTime
+     */
     simulateStep(state, deltaTime) {
         if (state === undefined) {
             return;
@@ -264,11 +288,12 @@ class PhysicsController {
         if (this.loading) {
             return;
         }
+        // We always need to apply animations, since the dirty flags get cleared each frame.
+        this._applyAnimations(state);
         if (this.skipFrames > 0) {
             this.skipFrames -= 1;
             return;
         }
-        this.applyAnimations(state);
         this.timeAccumulator += deltaTime;
         if (this.pauseTime !== undefined) {
             this.timeAccumulator = this.simulationStepTime;
@@ -287,7 +312,7 @@ class PhysicsController {
         }
     }
 
-    updateColliders(state, node, isTrigger = false) {
+    _updateColliders(state, node, isTrigger = false) {
         this.engine.updateActorTransform(node);
 
         let collider = undefined;
@@ -347,46 +372,59 @@ class PhysicsController {
         }
     }
 
-    applyAnimations(state) {
+    _applyAnimations(state) {
         this.engine.updatePhysicMaterials(state.gltf);
 
         for (const actorNode of this.staticActors) {
-            this.updateColliders(state, actorNode);
+            this._updateColliders(state, actorNode);
         }
 
         for (const actorNode of this.kinematicActors) {
             this.engine.updateMotion(actorNode);
-            this.updateColliders(state, actorNode);
+            this._updateColliders(state, actorNode);
         }
 
         for (const actorNode of this.dynamicActors) {
             this.engine.updateMotion(actorNode);
-            this.updateColliders(state, actorNode);
+            this._updateColliders(state, actorNode);
         }
 
         for (const node of this.independentTriggerNodes) {
-            this.updateColliders(state, node, true);
+            this._updateColliders(state, node, true);
         }
 
         for (const jointNode of this.jointNodes) {
-            this.engine.updatePhysicsJoint(state, jointNode); //TODO
+            this.engine.updatePhysicsJoint(state, jointNode);
         }
     }
 
+    /**
+     * Enable debug visualization of physics colliders.
+     * The exact visualization depends on the physics engine implementation.
+     * @param {boolean} enable
+     */
     enableDebugColliders(enable) {
         this.engine.enableDebugColliders(enable);
     }
 
+    /**
+     * Enable debug visualization of physics joints.
+     * The exact visualization depends on the physics engine implementation.
+     * @param {boolean} enable
+     */
     enableDebugJoints(enable) {
         this.engine.enableDebugJoints(enable);
     }
 
+    // Used by the renderer to get debug lines for physics visualization, if supported by the physics engine.
     getDebugLineData() {
         if (this.engine) {
             return this.engine.getDebugLineData();
         }
         return [];
     }
+
+    // Functions called by KHR_interactivity
 
     applyImpulse(nodeIndex, linearImpulse, angularImpulse) {
         this.engine.applyImpulse(nodeIndex, linearImpulse, angularImpulse);

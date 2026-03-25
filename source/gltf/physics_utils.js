@@ -1,6 +1,12 @@
 import { quat, vec3 } from "gl-matrix";
 
 class PhysicsUtils {
+    /**
+     * Returns the cumulative scale and scale axis from the node up to the root,
+     * which can be used to properly scale physics shapes
+     * @param {gltfNode} node
+     * @returns {{scale: vec3, scaleAxis: quat}}
+     */
     static calculateScaleAndAxis(node) {
         const scaleFactor = vec3.clone(node.scale);
         let scaleRotation = quat.create();
@@ -78,6 +84,23 @@ class PhysicsUtils {
         return triangleIndices;
     }
 
+    /**
+     * Recursively traverses the node hierarchy of a motion to find all colliders and triggers, and applies the custom function to them.
+     * The custom function has the following signature:
+     * function(gltf, node, collider/trigger, motionNode, computedWorldTransform, offsetChanged, scaleChanged, isTrigger, ...args)
+     * offsetChanged and scaleChanged are cumulative values that indicate whether any node in the hierarchy has a dirty offset or scale,
+     * which can be used to determine if the physics shape needs to be updated.
+     * isTrigger indicates whether the current geometry is a trigger or a collider.
+     *
+     * @param {gltf} gltf
+     * @param {gltfNode} node
+     * @param {KHR_physics_rigid_bodies_collider | KHR_physics_rigid_bodies_trigger} collider
+     * @param {gltfNode} motionNode
+     * @param {boolean} offsetChanged
+     * @param {boolean} scaleChanged
+     * @param {Function} customFunction
+     * @param {Array} args
+     */
     static recurseCollider(
         gltf,
         node,
