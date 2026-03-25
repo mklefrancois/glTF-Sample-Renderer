@@ -1,4 +1,4 @@
-import { quat, vec3 } from "gl-matrix";
+import { quat, vec3, mat4 } from "gl-matrix";
 
 class PhysicsUtils {
     /**
@@ -82,6 +82,29 @@ class PhysicsUtils {
         }
 
         return triangleIndices;
+    }
+
+    /**
+     * Recursively propagates a parent world transform down the node hierarchy,
+     * computing and storing the scaled physics transform for each non-motion node.
+     * Stops traversal at nodes that carry motion data.
+     *
+     * @param {object} gltf - The glTF asset containing the full node array.
+     * @param {object} node - The current node to process.
+     * @param {Float32Array} parentTransform - The 4x4 world transform of the parent node.
+     */
+    static applyTransformRecursively(gltf, node, parentTransform) {
+        if (node.extensions?.KHR_physics_rigid_bodies?.motion !== undefined) {
+            return;
+        }
+        const localTransform = node.getLocalTransform();
+        const globalTransform = mat4.create();
+        mat4.multiply(globalTransform, parentTransform, localTransform);
+        node.scaledPhysicsTransform = globalTransform;
+        for (const childIndex of node.children) {
+            const childNode = gltf.nodes[childIndex];
+            this.applyTransformRecursively(gltf, childNode, globalTransform);
+        }
     }
 
     /**

@@ -13,6 +13,10 @@ import { PhysicsInterface } from "./PhysicsInterface";
 import { PhysicsUtils } from "../gltf/physics_utils";
 
 class NvidiaPhysicsInterface extends PhysicsInterface {
+    /**
+     * Creates a new NvidiaPhysicsInterface instance, initializing all internal
+     * state maps, debug flags, and placeholders for the PhysX engine objects.
+     */
     constructor() {
         super();
         this.PhysX = undefined;
@@ -46,6 +50,13 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
 
     //region General
 
+    /**
+     * Asynchronously loads and initializes the PhysX WebAssembly module, creating the
+     * PhysX foundation, tolerances scale, physics object, and a default physics material.
+     *
+     * @async
+     * @returns {Promise<object>} The initialized PhysX module instance.
+     */
     async initializeEngine() {
         this.PhysX = await PhysX({ locateFile: () => "./libs/physx-js-webidl.wasm" });
         const version = this.PhysX.PHYSICS_VERSION;
@@ -71,6 +82,12 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         return this.PhysX;
     }
 
+    /**
+     * Applies the current debug visualization flags to the active PhysX scene.
+     * Enables or disables rendering of collision shapes, joint frames, joint limits,
+     * actor axes, and world axes based on {@link debugColliders} and {@link debugJoints}.
+     * Does nothing if there is no active scene or if the state has not changed.
+     */
     changeDebugVisualization() {
         if (!this.scene || !this.debugStateChanged) {
             return;
@@ -111,6 +128,24 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         }
     }
 
+    /**
+     * Sets up the PhysX scene and populates it with actors and joints derived from the
+     * provided glTF node lists. Creates collision filters, physics materials, and the
+     * PhysX scene descriptor before adding static, kinematic, dynamic, trigger, and
+     * joint actors.
+     *
+     * @param {object} state - The current viewer state, containing the glTF asset and controllers.
+     * @param {Array<object>} staticActors - Nodes to be created as static rigid body actors.
+     * @param {Array<object>} kinematicActors - Nodes to be created as kinematic rigid body actors.
+     * @param {Array<object>} dynamicActors - Nodes to be created as dynamic rigid body actors.
+     * @param {Array<object>} jointNodes - Nodes carrying joint definitions.
+     * @param {Array<object>} triggerNodes - Nodes designated as trigger volumes.
+     * @param {Array<object>} independentTriggerNodes - Trigger nodes not already covered by another actor.
+     * @param {Map<number, object>} nodeToMotion - Mapping from node index to motion data.
+     * @param {boolean} _hasRuntimeAnimationTargets - Unused; reserved for future use.
+     * @param {number} _staticMeshColliderCount - Unused; reserved for future use.
+     * @param {number} _dynamicMeshColliderCount - Unused; reserved for future use.
+     */
     initializeSimulation(
         state,
         staticActors,
@@ -285,30 +320,34 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         this.changeDebugVisualization();
     }
 
+    /**
+     * Enables or disables debug visualization of collision shapes.
+     *
+     * @param {boolean} enable - `true` to show collision shape debug rendering; `false` to hide it.
+     */
     enableDebugColliders(enable) {
         this.debugColliders = enable;
         this.debugStateChanged = true;
     }
 
+    /**
+     * Enables or disables debug visualization of physics joints.
+     *
+     * @param {boolean} enable - `true` to show joint debug rendering; `false` to hide it.
+     */
     enableDebugJoints(enable) {
         this.debugJoints = enable;
         this.debugStateChanged = true;
     }
 
-    applyTransformRecursively(gltf, node, parentTransform) {
-        if (node.extensions?.KHR_physics_rigid_bodies?.motion !== undefined) {
-            return;
-        }
-        const localTransform = node.getLocalTransform();
-        const globalTransform = mat4.create();
-        mat4.multiply(globalTransform, parentTransform, localTransform);
-        node.scaledPhysicsTransform = globalTransform;
-        for (const childIndex of node.children) {
-            const childNode = gltf.nodes[childIndex];
-            this.applyTransformRecursively(gltf, childNode, globalTransform);
-        }
-    }
-
+    /**
+     * Executes a single fixed-duration physics sub-step. Before stepping, applies
+     * kinematic targets for nodes with velocity overrides and non-unit gravity factors.
+     * After stepping, calls `scene.fetchResults` to commit the simulation results.
+     *
+     * @param {object} state - The current viewer state.
+     * @param {number} deltaTime - The duration of the sub-step in seconds.
+     */
     subStepSimulation(state, deltaTime) {
         // eslint-disable-next-line no-unused-vars
         for (const [nodeIndex, { actor, pxShapeMap }] of this.nodeToActor.entries()) {
@@ -395,6 +434,14 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         }
     }
 
+    /**
+     * Advances the physics simulation by one frame. Checks for a pending reset,
+     * updates debug visualization, runs {@link subStepSimulation}, then reads back
+     * actor poses and propagates them to the corresponding glTF nodes and their children.
+     *
+     * @param {object} state - The current viewer state.
+     * @param {number} deltaTime - The elapsed time since the last frame, in seconds.
+     */
     simulateStep(state, deltaTime) {
         if (!this.scene) {
             this.reset = false;
@@ -464,7 +511,7 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
                 node.scaledPhysicsTransform = scaledPhysicsTransform;
                 for (const childIndex of node.children) {
                     const childNode = state.gltf.nodes[childIndex];
-                    this.applyTransformRecursively(
+                    PhysicsUtils.applyTransformRecursively(
                         state.gltf,
                         childNode,
                         node.scaledPhysicsTransform
@@ -474,11 +521,21 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         }
     }
 
+    /**
+     * Schedules a simulation reset on the next call to {@link simulateStep}.
+     * Triggers {@link _resetSimulation} immediately by calling `simulateStep` with a
+     * zero delta time.
+     */
     resetSimulation() {
         this.reset = true;
         this.simulateStep({}, 0);
     }
 
+    /**
+     * Immediately tears down the current PhysX scene, releasing all actors, shapes,
+     * joints, meshes, materials, and filter data. Clears all internal caches so
+     * the simulation can be re-initialized from scratch.
+     */
     _resetSimulation() {
         const scenePointer = this.scene;
         this.scene = undefined;
@@ -528,6 +585,14 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         this.shapeToNode.clear();
     }
 
+    /**
+     * Retrieves the current debug render-buffer line data from the PhysX scene.
+     * Returns an interleaved flat array of `[x0, y0, z0, x1, y1, z1, ...]` for
+     * each debug line segment.
+     *
+     * @returns {number[]} A flat array of line endpoint coordinates, or an empty
+     *   array if there is no active scene or debug visualization is disabled.
+     */
     getDebugLineData() {
         if (!this.scene || (this.debugColliders === false && this.debugJoints === false)) {
             return [];
@@ -547,6 +612,14 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         return result;
     }
 
+    /**
+     * Applies a linear and an angular impulse to the dynamic actor associated with
+     * the given node index.
+     *
+     * @param {number} nodeIndex - Index of the target glTF node.
+     * @param {number[]} linearImpulse - World-space linear impulse as `[x, y, z]`.
+     * @param {number[]} angularImpulse - World-space angular impulse as `[x, y, z]`.
+     */
     applyImpulse(nodeIndex, linearImpulse, angularImpulse) {
         if (!this.scene) {
             return;
@@ -569,6 +642,15 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         this.PhysX.destroy(angImpulse);
     }
 
+    /**
+     * Applies a linear impulse at a specific world-space position on the actor
+     * associated with the given node index. The off-centre application will also
+     * generate a corresponding angular impulse.
+     *
+     * @param {number} nodeIndex - Index of the target glTF node.
+     * @param {number[]} impulse - World-space impulse vector as `[x, y, z]`.
+     * @param {number[]} position - World-space point of application as `[x, y, z]`.
+     */
     applyPointImpulse(nodeIndex, impulse, position) {
         if (!this.scene) {
             return;
@@ -595,6 +677,16 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         this.PhysX.destroy(pxPosition);
     }
 
+    /**
+     * Performs a ray-cast between two world-space points and returns information
+     * about the first shape hit.
+     *
+     * @param {number[]} rayStart - World-space ray origin as `[x, y, z]`.
+     * @param {number[]} rayEnd - World-space ray terminus as `[x, y, z]`.
+     * @returns {{ hitNodeIndex: number, hitFraction?: number, hitNormal?: Float32Array }}
+     *   An object containing the index of the hit node (`-1` on miss), the normalised
+     *   hit fraction along the ray, and the surface normal at the hit point.
+     */
     rayCast(rayStart, rayEnd) {
         const result = {};
         result.hitNodeIndex = -1;
@@ -656,6 +748,13 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
 
     //region Updates
 
+    /**
+     * Synchronises the PhysX actor pose with the node's current world transform when
+     * the node has been flagged as dirty (e.g. by an animation). For kinematic actors
+     * `setKinematicTarget` is used; for others `setGlobalPose` is used directly.
+     *
+     * @param {object} node - The glTF node whose actor transform should be updated.
+     */
     updateActorTransform(node) {
         if (node.dirtyTransform) {
             const actor = this.nodeToActor.get(node.gltfObjectIndex)?.actor;
@@ -680,6 +779,13 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         }
     }
 
+    /**
+     * Updates the PhysX material parameters (static friction, dynamic friction,
+     * restitution) for any glTF physics materials that have been marked dirty.
+     *
+     * @param {object} gltf - The glTF asset whose `KHR_physics_rigid_bodies` extension
+     *   contains the physics materials list.
+     */
     updatePhysicMaterials(gltf) {
         const materials = gltf.extensions?.KHR_physics_rigid_bodies?.physicsMaterials;
         if (materials === undefined) {
@@ -696,6 +802,13 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         }
     }
 
+    /**
+     * Applies any dirty motion-property changes (kinematic flag, mass, inertia,
+     * gravity factor, linear velocity, angular velocity) from the glTF node's motion
+     * extension to the corresponding PhysX actor.
+     *
+     * @param {object} actorNode - The glTF node whose motion properties should be updated.
+     */
     updateMotion(actorNode) {
         const motion = actorNode.extensions?.KHR_physics_rigid_bodies?.motion;
         const actor = this.nodeToActor.get(actorNode.gltfObjectIndex).actor;
@@ -748,6 +861,20 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         }
     }
 
+    /**
+     * Updates the geometry and/or local pose of a collider shape attached to an actor.
+     * Handles scale changes for convex/triangle mesh geometries and recreates simple
+     * shapes when their defining properties have changed.
+     *
+     * @param {object} gltf - The glTF asset.
+     * @param {object} node - The node that owns the collider shape.
+     * @param {object} collider - The glTF collider descriptor for the node.
+     * @param {object} actorNode - The node that owns the PhysX actor.
+     * @param {Float32Array} worldTransform - The 4x4 world transform of the collider node.
+     * @param {boolean} offsetChanged - `true` if the shape's local pose must be recomputed.
+     * @param {boolean} scaleChanged - `true` if the geometry scale must be updated.
+     * @param {boolean} isTrigger - `true` if the shape is a trigger volume.
+     */
     updateCollider(
         gltf,
         node,
@@ -872,6 +999,13 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         }
     }
 
+    /**
+     * Propagates dirty joint-property changes (collision flag, limits, drives) from
+     * the glTF joint extension to the corresponding PhysX D6 joint constraints.
+     *
+     * @param {object} state - The current viewer state, providing access to the glTF asset.
+     * @param {object} jointNode - The glTF node whose joint properties should be updated.
+     */
     updatePhysicsJoint(state, jointNode) {
         const pxJoints = this.nodeToSimplifiedJoints.get(jointNode.gltfObjectIndex);
         if (pxJoints === undefined) {
@@ -976,6 +1110,21 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
 
     //region Geometry
 
+    /**
+     * Creates or updates a PhysX box geometry with the given dimensions and scale.
+     * If a non-uniform scale with a non-identity axis quaternion is detected the box
+     * is approximated as a convex mesh instead.
+     *
+     * @param {number} x - Full extent along the X axis (before scaling).
+     * @param {number} y - Full extent along the Y axis (before scaling).
+     * @param {number} z - Full extent along the Z axis (before scaling).
+     * @param {number[]} scale - Per-axis scale factors as `[sx, sy, sz]`.
+     * @param {quat} scaleAxis - Quaternion describing the orientation of the scale axes.
+     * @param {object} [reference] - An existing PhysX geometry object to update in-place.
+     *   If supplied and the type matches, the geometry is mutated rather than re-created.
+     * @returns {object|undefined} A new `PxBoxGeometry` (or `PxConvexMeshGeometry`),
+     *   or `undefined` when the reference geometry was updated in-place.
+     */
     // Either create a box or update an existing one. Returns only newly created geometry
     generateBox(x, y, z, scale, scaleAxis, reference) {
         let referenceType = undefined;
@@ -1009,11 +1158,35 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         return geometry;
     }
 
+    /**
+     * Creates a PhysX convex mesh geometry approximating a capsule shape.
+     *
+     * @param {number} height - The height of the cylindrical mid-section.
+     * @param {number} radiusTop - Radius of the top hemisphere.
+     * @param {number} radiusBottom - Radius of the bottom hemisphere.
+     * @param {number[]} scale - Per-axis scale factors as `[sx, sy, sz]`.
+     * @param {quat} scaleAxis - Quaternion describing the orientation of the scale axes.
+     * @param {object} _reference - Unused; reserved for API consistency.
+     * @returns {object} The created `PxConvexMeshGeometry`.
+     */
     generateCapsule(height, radiusTop, radiusBottom, scale, scaleAxis, _reference) {
         const data = createCapsuleVertexData(radiusTop, radiusBottom, height);
         return this.createConvexPxMesh(data.vertices, scale, scaleAxis);
     }
 
+    /**
+     * Creates a PhysX convex mesh geometry approximating a cylinder shape.
+     * Falls back to a scaled convex hull representation when non-uniform scaling
+     * or different top/bottom radii are detected.
+     *
+     * @param {number} height - The height of the cylinder.
+     * @param {number} radiusTop - Radius of the top face.
+     * @param {number} radiusBottom - Radius of the bottom face.
+     * @param {number[]} scale - Per-axis scale factors as `[sx, sy, sz]`.
+     * @param {quat} scaleAxis - Quaternion describing the orientation of the scale axes.
+     * @param {object} _reference - Unused; reserved for API consistency.
+     * @returns {object} The created `PxConvexMeshGeometry`.
+     */
     generateCylinder(height, radiusTop, radiusBottom, scale, scaleAxis, _reference) {
         if (
             (quat.equals(scaleAxis, quat.create()) === false &&
@@ -1031,6 +1204,17 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         return this.createConvexPxMesh(data.vertices);
     }
 
+    /**
+     * Creates or updates a PhysX sphere geometry. If a non-uniform scale is detected
+     * the sphere is approximated as a convex mesh instead.
+     *
+     * @param {number} radius - The radius of the sphere before scaling.
+     * @param {number[]} scale - Per-axis scale factors as `[sx, sy, sz]`.
+     * @param {quat} scaleAxis - Quaternion describing the orientation of the scale axes.
+     * @param {object} [reference] - An existing PhysX geometry object to update in-place.
+     * @returns {object|undefined} A new `PxSphereGeometry` (or `PxConvexMeshGeometry`),
+     *   or `undefined` when the reference geometry was updated in-place.
+     */
     generateSphere(radius, scale, scaleAxis, reference) {
         let referenceType = undefined;
         if (reference !== undefined) {
@@ -1050,6 +1234,14 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         return geometry;
     }
 
+    /**
+     * Creates a PhysX infinite plane geometry.
+     *
+     * @param {object} [reference] - An existing PhysX geometry object. If supplied,
+     *   no new geometry is created because plane geometry has no mutable properties.
+     * @returns {object|undefined} A new `PxPlaneGeometry`, or `undefined` if a
+     *   reference was provided.
+     */
     generatePlane(reference) {
         if (reference !== undefined) {
             // Nothing to update
@@ -1059,6 +1251,16 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         return geometry;
     }
 
+    /**
+     * Cooks a PhysX convex mesh from the provided vertex data and wraps it in a
+     * `PxConvexMeshGeometry` with the given scale and scale-axis rotation.
+     * The resulting `PxConvexMesh` is tracked in {@link convexMeshes} for later cleanup.
+     *
+     * @param {Float32Array} vertices - Flat array of vertex positions `[x, y, z, ...]`.
+     * @param {number[]} [scale] - Per-axis scale factors; defaults to `[1, 1, 1]`.
+     * @param {quat} [scaleAxis] - Quaternion for scale-axis rotation; defaults to identity.
+     * @returns {object} The created `PxConvexMeshGeometry`.
+     */
     createConvexPxMesh(vertices, scale = vec3.fromValues(1, 1, 1), scaleAxis = quat.create()) {
         const malloc = (f, q) => {
             const nDataBytes = f.length * f.BYTES_PER_ELEMENT;
@@ -1097,6 +1299,19 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         return geometry;
     }
 
+    /**
+     * Extracts and flattens vertex position and (optionally) index data from all
+     * primitives of a glTF mesh. Morph targets are applied on the CPU using the
+     * mesh's current weights. Triangle-strip and triangle-fan primitives are
+     * converted to indexed triangles automatically.
+     *
+     * @param {object} gltf - The glTF asset.
+     * @param {object} mesh - The glTF mesh to collect data from.
+     * @param {boolean} [computeIndices=true] - Whether to collect index data in
+     *   addition to vertex positions.
+     * @returns {{ vertices: Float32Array, indices: Uint32Array }} The collected
+     *   geometry data.
+     */
     collectVerticesAndIndicesFromMesh(gltf, mesh, computeIndices = true) {
         let positionDataArray = [];
         let positionCount = 0;
@@ -1177,11 +1392,30 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         return { vertices: positionData, indices: indexData };
     }
 
+    /**
+     * Creates a PhysX convex hull mesh geometry from the vertex data of a glTF mesh.
+     *
+     * @param {object} gltf - The glTF asset.
+     * @param {object} mesh - The glTF mesh to build the convex hull from.
+     * @param {number[]} [scale] - Per-axis scale factors; defaults to `[1, 1, 1]`.
+     * @param {quat} [scaleAxis] - Quaternion for scale-axis rotation; defaults to identity.
+     * @returns {object} The created `PxConvexMeshGeometry`.
+     */
     createConvexMesh(gltf, mesh, scale = vec3.fromValues(1, 1, 1), scaleAxis = quat.create()) {
         const result = this.collectVerticesAndIndicesFromMesh(gltf, mesh, false);
         return this.createConvexPxMesh(result.vertices, scale, scaleAxis);
     }
 
+    /**
+     * Cooks a PhysX triangle mesh from the vertex and index data of a glTF mesh.
+     * The resulting `PxTriangleMesh` is tracked in {@link triangleMeshes} for later cleanup.
+     *
+     * @param {object} gltf - The glTF asset.
+     * @param {object} mesh - The glTF mesh to build the triangle mesh from.
+     * @param {number[]} [scale] - Per-axis scale factors; defaults to `[1, 1, 1]`.
+     * @param {quat} [scaleAxis] - Quaternion for scale-axis rotation; defaults to identity.
+     * @returns {object} The created `PxTriangleMeshGeometry`.
+     */
     createPxMesh(gltf, mesh, scale = vec3.fromValues(1, 1, 1), scaleAxis = quat.create()) {
         const { vertices, indices } = this.collectVerticesAndIndicesFromMesh(gltf, mesh, true);
         const malloc = (f, q) => {
@@ -1229,6 +1463,15 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         return geometry;
     }
 
+    /**
+     * Determines whether two collision filters should generate contacts with each other.
+     * `filterB`'s include/exclude system lists are checked against `filterA`'s
+     * collision systems.
+     *
+     * @param {object} filterA - The first collision filter descriptor.
+     * @param {object} filterB - The second collision filter descriptor whose rules are evaluated.
+     * @returns {boolean} `true` if the two filters should produce collision events.
+     */
     collidesWith(filterA, filterB) {
         if (filterB.collideWithSystems.length > 0) {
             for (const system of filterB.collideWithSystems) {
@@ -1252,6 +1495,15 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
 
     //region Shapes
 
+    /**
+     * Pre-computes a bit-mask collision matrix for all collision filters defined in
+     * the glTF `KHR_physics_rigid_bodies` extension. Each entry `filterData[i]` is a
+     * bitmask of filter indices that filter `i` should collide with. Index 31 is
+     * reserved as the default filter (collides with everything). A maximum of 31
+     * user-defined filters are supported.
+     *
+     * @param {object} gltf - The glTF asset containing the collision filter definitions.
+     */
     computeFilterData(gltf) {
         // Default filter is sign bit
         const filters = gltf.extensions?.KHR_physics_rigid_bodies?.collisionFilters;
@@ -1279,6 +1531,14 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         }
     }
 
+    /**
+     * Creates a new PhysX material from a glTF physics material descriptor.
+     * Returns the default material when `undefined` is passed.
+     *
+     * @param {object|undefined} gltfPhysicsMaterial - The glTF physics material
+     *   (from `KHR_physics_rigid_bodies`), or `undefined` to use the default material.
+     * @returns {object} The created (or default) `PxMaterial`.
+     */
     createPhysXMaterial(gltfPhysicsMaterial) {
         if (gltfPhysicsMaterial === undefined) {
             return this.defaultMaterial;
@@ -1302,6 +1562,15 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         return physxMaterial;
     }
 
+    /**
+     * Creates a `PxFilterData` object encoding the collision filter bit-masks for a
+     * given filter index, along with CCD contact detection flags.
+     *
+     * @param {number|undefined} collisionFilter - Index into the pre-computed filter
+     *   table, or `undefined` to apply the default filter (collides with everything).
+     * @param {number} [additionalFlags=0] - Extra `PxPairFlag` bits to OR into word2.
+     * @returns {object} The created `PxFilterData`.
+     */
     createPhysXCollisionFilter(collisionFilter, additionalFlags = 0) {
         let word0 = null;
         let word1 = null;
@@ -1320,6 +1589,22 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         return new this.PhysX.PxFilterData(word0, word1, additionalFlags, 0);
     }
 
+    /**
+     * Creates a PhysX shape from an existing geometry object, assigning the correct
+     * material and collision filter data. Material and filter data are resolved from
+     * the glTF collider descriptor when not provided explicitly.
+     *
+     * @param {object} geometry - The PhysX geometry to attach to the shape.
+     * @param {object|undefined} physXMaterial - The `PxMaterial` to use, or `undefined`
+     *   to derive it from `glTFCollider`.
+     * @param {object|undefined} physXFilterData - The `PxFilterData` to use, or `undefined`
+     *   to derive it from `glTFCollider`.
+     * @param {object} shapeFlags - `PxShapeFlags` controlling the shape's role
+     *   (simulation, scene-query, trigger, etc.).
+     * @param {object} glTFCollider - The glTF collider descriptor used to resolve
+     *   material and filter data when the explicit arguments are `undefined`.
+     * @returns {object} The created `PxShape`.
+     */
     createShapeFromGeometry(geometry, physXMaterial, physXFilterData, shapeFlags, glTFCollider) {
         if (physXMaterial === undefined) {
             if (glTFCollider?.physicsMaterial !== undefined) {
@@ -1342,6 +1627,24 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         return shape;
     }
 
+    /**
+     * Creates a PhysX shape for a given glTF node and collider descriptor.
+     * Resolves the geometry from either an implicit shape index or a glTF mesh,
+     * then delegates to {@link createShapeFromGeometry} and records the
+     * shape-to-node mapping.
+     *
+     * @param {object} gltf - The glTF asset.
+     * @param {object} node - The glTF node the shape belongs to.
+     * @param {object} collider - The glTF collider descriptor.
+     * @param {object} shapeFlags - `PxShapeFlags` for the new shape.
+     * @param {object|undefined} physXMaterial - Override material, or `undefined`.
+     * @param {object|undefined} physXFilterData - Override filter data, or `undefined`.
+     * @param {boolean} convexHull - `true` to force a convex-hull mesh for mesh colliders.
+     * @param {number[]} [scale] - Per-axis scale factors; defaults to `[1, 1, 1]`.
+     * @param {quat} [scaleAxis] - Quaternion for scale-axis rotation; defaults to identity.
+     * @returns {object|undefined} The created `PxShape`, or `undefined` if no
+     *   geometry could be resolved.
+     */
     createShape(
         gltf,
         node,
@@ -1387,6 +1690,13 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         return shape;
     }
 
+    /**
+     * Maps a glTF material friction/restitution combine mode string to the
+     * corresponding PhysX `PxCombineModeEnum` value.
+     *
+     * @param {string} mode - One of `'average'`, `'minimum'`, `'maximum'`, or `'multiply'`.
+     * @returns {number} The matching `PxCombineModeEnum` constant.
+     */
     mapCombineMode(mode) {
         switch (mode) {
             case "average":
@@ -1404,6 +1714,19 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
 
     //region Actors
 
+    /**
+     * Creates a PhysX rigid body actor for a glTF node, attaches all collider and
+     * trigger shapes (including those from child nodes), configures mass/inertia
+     * and initial velocities, then adds the actor to the active scene.
+     *
+     * @param {object} gltf - The glTF asset.
+     * @param {object} node - The root node of the actor.
+     * @param {object} shapeFlags - `PxShapeFlags` used for simulation/query shapes.
+     * @param {object} triggerFlags - `PxShapeFlags` used for trigger shapes.
+     * @param {'static'|'kinematic'|'dynamic'|'trigger'} type - Actor type.
+     * @param {boolean} [noMeshShapes=false] - When `true`, mesh colliders are
+     *   treated as convex hulls rather than exact triangle meshes.
+     */
     createActor(gltf, node, shapeFlags, triggerFlags, type, noMeshShapes = false) {
         const worldTransform = node.worldTransform;
         const translation = vec3.create();
@@ -1592,6 +1915,18 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         this.nodeToActor.set(node.gltfObjectIndex, { actor, pxShapeMap: pxShapeMap });
     }
 
+    /**
+     * Walks up the node hierarchy to find the nearest ancestor that owns a PhysX
+     * actor, then computes the local offset (position and rotation) of the given
+     * node relative to that actor's frame. Used to determine joint attachment frames.
+     *
+     * @param {object} node - The joint attachment node.
+     * @param {object} referencedJoint - The simplified joint descriptor, which may
+     *   supply a local rotation override.
+     * @returns {{ actor: object|undefined, offsetPosition: vec3, offsetRotation: quat }}
+     *   The resolved actor (or `undefined` for world-relative), offset position,
+     *   and offset rotation.
+     */
     computeJointOffsetAndActor(node, referencedJoint) {
         let currentNode = node;
         while (currentNode !== undefined) {
@@ -1630,6 +1965,16 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         return { actor: actor, offsetPosition: offsetPosition, offsetRotation: offsetRotation };
     }
 
+    /**
+     * Configures the mass, inertia tensor, and center-of-mass pose of a PhysX
+     * rigid body actor from the `KHR_physics_rigid_bodies` motion properties.
+     * Falls back to automatic mass/inertia estimation via `PxRigidBodyExt` when
+     * no explicit values are provided.
+     *
+     * @param {object} motion - The glTF motion extension object containing mass,
+     *   inertiaDiagonal, inertiaOrientation, and centerOfMass properties.
+     * @param {object} actor - The PhysX `PxRigidDynamic` actor to configure.
+     */
     calculateMassAndInertia(motion, actor) {
         const pos = new this.PhysX.PxVec3(0, 0, 0);
         if (motion.centerOfMass !== undefined) {
@@ -1719,6 +2064,16 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
 
     //region Joints
 
+    /**
+     * Converts a zero-based axis index and a motion type to the corresponding
+     * PhysX `PxD6AxisEnum` value.
+     *
+     * @param {0|1|2} axisIndex - The axis index (0 = X/Twist, 1 = Y/Swing1, 2 = Z/Swing2).
+     * @param {'linear'|'angular'} type - Whether to interpret the index as a linear
+     *   or angular axis.
+     * @returns {number|null} The matching `PxD6AxisEnum` constant, or `null` if the
+     *   combination is not recognised.
+     */
     convertAxisIndexToEnum(axisIndex, type) {
         if (type === "linear") {
             switch (axisIndex) {
@@ -1742,6 +2097,14 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         return null;
     }
 
+    /**
+     * Converts a zero-based axis index to the corresponding PhysX D6 angular drive
+     * enum value.
+     *
+     * @param {0|1|2} axisIndex - The axis index (0 = Twist, 1 = Swing1, 2 = Swing2).
+     * @returns {number|null} The matching `PxD6DriveEnum` constant (or a raw integer
+     *   for axes not yet exposed by the bindings), or `null` if not recognised.
+     */
     convertAxisIndexToAngularDriveEnum(axisIndex) {
         switch (axisIndex) {
             case 0:
@@ -1754,6 +2117,15 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         return null;
     }
 
+    /**
+     * Checks whether the two swing limits of a simplified joint are symmetric,
+     * which determines whether a cone limit or a pyramid limit should be used in PhysX.
+     *
+     * @param {object} joint - The simplified joint descriptor containing optional
+     *   `swingLimit1` and `swingLimit2` properties.
+     * @returns {boolean} `true` if both limits are symmetric (centred around zero),
+     *   allowing a cone limit; `false` if a pyramid limit is required.
+     */
     validateSwingLimits(joint) {
         // Check if swing limits are symmetric (cone) or asymmetric (pyramid)
         if (joint.swingLimit1 && joint.swingLimit2) {
@@ -1771,6 +2143,15 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         return false;
     }
 
+    /**
+     * Creates the PhysX `PxD6Joint` constraints for a glTF joint node. Each simplified
+     * physics joint defined on the referenced glTF joint is converted to one PhysX joint,
+     * and the results are stored in {@link nodeToSimplifiedJoints}.
+     *
+     * @param {object} gltf - The glTF asset.
+     * @param {object} node - The glTF node carrying the `KHR_physics_rigid_bodies.joint`
+     *   extension data.
+     */
     createJoint(gltf, node) {
         const joint = node.extensions?.KHR_physics_rigid_bodies?.joint;
         const referencedJoint =
@@ -1788,6 +2169,17 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         this.nodeToSimplifiedJoints.set(node.gltfObjectIndex, simplifiedJoints);
     }
 
+    /**
+     * Applies the motion and limit parameters for a single simplified-joint limit to
+     * a PhysX D6 joint. Handles linear pair limits, distance limits (3-axis linear
+     * constraint), and angular axis locks.
+     *
+     * @param {object} physxJoint - The PhysX `PxD6Joint` to configure.
+     * @param {object} simplifiedJoint - The simplified joint descriptor supplying
+     *   axis-mapping helpers.
+     * @param {object} limit - The individual limit descriptor (with `linearAxes`,
+     *   `angularAxes`, `min`, `max`, `stiffness`, `damping`).
+     */
     _setLimitValues(physxJoint, simplifiedJoint, limit) {
         const lock = limit.min === 0 && limit.max === 0;
         const spring = new this.PhysX.PxSpring(limit.stiffness ?? 0, limit.damping);
@@ -1839,6 +2231,14 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         this.PhysX.destroy(spring);
     }
 
+    /**
+     * Applies the twist-limit angular range from a simplified joint to a PhysX D6
+     * joint. Does nothing if the simplified joint has no twist limit defined.
+     *
+     * @param {object} physxJoint - The PhysX `PxD6Joint` to configure.
+     * @param {object} simplifiedJoint - The simplified joint descriptor containing
+     *   the optional `twistLimit` property.
+     */
     _setTwistLimitValues(physxJoint, simplifiedJoint) {
         if (simplifiedJoint.twistLimit !== undefined) {
             if (!(simplifiedJoint.twistLimit.min === 0 && simplifiedJoint.twistLimit.max === 0)) {
@@ -1856,6 +2256,16 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         }
     }
 
+    /**
+     * Applies the swing-limit angular ranges from a simplified joint to a PhysX D6
+     * joint. Uses a cone limit when both swing axes are symmetric, a pyramid limit
+     * when they are asymmetric, and falls back to a single-axis cone when only one
+     * swing limit is defined.
+     *
+     * @param {object} physxJoint - The PhysX `PxD6Joint` to configure.
+     * @param {object} simplifiedJoint - The simplified joint descriptor containing
+     *   optional `swingLimit1` and/or `swingLimit2` properties.
+     */
     _setSwingLimitValues(physxJoint, simplifiedJoint) {
         if (
             simplifiedJoint.swingLimit1 !== undefined &&
@@ -1942,6 +2352,16 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         }
     }
 
+    /**
+     * Creates and assigns a `PxD6JointDrive` to the appropriate axis of a PhysX D6
+     * joint, configuring its stiffness, damping, maximum force, and drive mode.
+     *
+     * @param {object} physxJoint - The PhysX `PxD6Joint` to configure.
+     * @param {object} simplifiedJoint - The simplified joint descriptor supplying
+     *   axis-mapping helpers.
+     * @param {object} drive - The drive descriptor with `stiffness`, `damping`,
+     *   `maxForce`, `mode`, `type`, and `axis`.
+     */
     _setDriveValues(physxJoint, simplifiedJoint, drive) {
         const physxDrive = new this.PhysX.PxD6JointDrive(
             drive.stiffness,
@@ -1960,6 +2380,19 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         this.PhysX.destroy(physxDrive);
     }
 
+    /**
+     * Accumulates the velocity target for a single drive axis into the provided
+     * mutable velocity target vectors. Linear and angular axes are handled separately.
+     *
+     * @param {object} simplifiedJoint - The simplified joint descriptor supplying
+     *   axis-mapping helpers.
+     * @param {object} drive - The drive descriptor containing `type`, `axis`, and
+     *   `velocityTarget`.
+     * @param {object} linearVelocityTarget - `PxVec3` accumulator for linear targets;
+     *   mutated in place.
+     * @param {object} angularVelocityTarget - `PxVec3` accumulator for angular targets;
+     *   mutated in place.
+     */
     _getDriveVelocityTarget(simplifiedJoint, drive, linearVelocityTarget, angularVelocityTarget) {
         const result = simplifiedJoint.getRotatedAxisAndSign(drive.axis);
         if (drive.type === "linear") {
@@ -1973,6 +2406,14 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         }
     }
 
+    /**
+     * Computes the aggregate position and orientation drive targets from all drives
+     * defined on a simplified joint and applies them to the PhysX D6 joint via `setDrivePosition`.
+     *
+     * @param {object} physxJoint - The PhysX `PxD6Joint` to configure.
+     * @param {object} simplifiedJoint - The simplified joint descriptor containing
+     *   the `drives` array.
+     */
     _setDrivePositionTarget(physxJoint, simplifiedJoint) {
         const positionTarget = vec3.fromValues(0, 0, 0);
         const angleTarget = quat.create();
@@ -2023,6 +2464,18 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
         this.PhysX.destroy(targetTransform);
     }
 
+    /**
+     * Creates a fully configured PhysX `PxD6Joint` for a single simplified joint
+     * descriptor. Resolves actor references and frame offsets for both bodies,
+     * sets all motion axes to free, then applies limits, drives, and drive targets
+     * from the simplified joint data.
+     *
+     * @param {object} gltf - The glTF asset.
+     * @param {object} node - The glTF node that owns the joint.
+     * @param {object} joint - The `KHR_physics_rigid_bodies.joint` extension data.
+     * @param {object} simplifiedJoint - The simplified joint descriptor to materialise.
+     * @returns {object} The created `PxD6Joint`.
+     */
     createSimplifiedJoint(gltf, node, joint, simplifiedJoint) {
         const resultA = this.computeJointOffsetAndActor(node, simplifiedJoint);
         const resultB = this.computeJointOffsetAndActor(
