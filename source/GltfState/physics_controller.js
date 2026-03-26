@@ -2,6 +2,9 @@ import { getAnimatedIndices } from "../gltf/gltf_utils";
 import { NvidiaPhysicsInterface } from "../PhysicsEngines/PhysX";
 import { PhysicsUtils } from "../gltf/physics_utils";
 
+/**
+ * Controller for managing the physics simulation of a glTF scene.
+ */
 class PhysicsController {
     constructor() {
         this.engine = undefined;
@@ -277,7 +280,7 @@ class PhysicsController {
      * if the initial loading is done.
      * A step will only be simulated if enough time has passed since the last simulated step,
      * based on the configured simulation step time.
-     * Can also be used to manually advance the simulation when it is paused, in this case simulationStepTime is used as deltaTime.
+     * Can also be used to manually advance the simulation when it is paused.
      * @param {GltfState} state
      * @param {number} deltaTime
      */
@@ -295,11 +298,9 @@ class PhysicsController {
             return;
         }
         this.timeAccumulator += deltaTime;
-        if (this.pauseTime !== undefined) {
+        if (this.pauseTime !== undefined && this.playing) {
             this.timeAccumulator = this.simulationStepTime;
-            if (this.playing) {
-                this.pauseTime = undefined;
-            }
+            this.pauseTime = undefined;
         }
         if (
             this.enabled &&
@@ -426,14 +427,38 @@ class PhysicsController {
 
     // Functions called by KHR_interactivity
 
+    /**
+     * Applies a linear and/or angular impulse to the actor associated with the given node.
+     * An impulse causes an instantaneous change in the actor's velocity proportional to its mass.
+     * @param {number} nodeIndex - glTF node index of the target dynamic actor.
+     * @param {vec3} linearImpulse - Impulse vector applied to the center of mass, in world space (kg⋅m/s).
+     * @param {vec3} angularImpulse - Angular impulse vector applied around the center of mass, in world space (kg⋅m²/s).
+     */
     applyImpulse(nodeIndex, linearImpulse, angularImpulse) {
         this.engine.applyImpulse(nodeIndex, linearImpulse, angularImpulse);
     }
 
+    /**
+     * Applies a linear impulse to the actor associated with the given node at a specific world-space position.
+     * Applying the impulse off-center will also induce a torque on the actor.
+     * @param {number} nodeIndex - glTF node index of the target dynamic actor.
+     * @param {vec3} impulse - Impulse vector to apply, in world space (kg⋅m/s).
+     * @param {vec3} position - World-space position at which the impulse is applied.
+     */
     applyPointImpulse(nodeIndex, impulse, position) {
         this.engine.applyPointImpulse(nodeIndex, impulse, position);
     }
 
+    /**
+     * Performs a ray-cast between two world-space points and returns information
+     * about the first shape hit.
+     *
+     * @param {number[]} rayStart - World-space ray origin as `[x, y, z]`.
+     * @param {number[]} rayEnd - World-space ray terminus as `[x, y, z]`.
+     * @returns {{ hitNodeIndex: number, hitFraction: number | undefined, hitNormal: Float32Array | undefined}}
+     *   An object containing the index of the hit node (`-1` on miss), the normalised
+     *   hit fraction along the ray, and the surface normal at the hit point.
+     */
     rayCast(rayStart, rayEnd) {
         return this.engine.rayCast(rayStart, rayEnd);
     }

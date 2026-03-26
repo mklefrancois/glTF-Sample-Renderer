@@ -19,6 +19,9 @@ that are then used to display the loaded data with GltfView</p>
 <dt><a href="#GraphController">GraphController</a></dt>
 <dd><p>A controller for managing KHR_interactivity graphs in a glTF scene.</p>
 </dd>
+<dt><a href="#PhysicsController">PhysicsController</a></dt>
+<dd><p>Controller for managing the physics simulation of a glTF scene.</p>
+</dd>
 </dl>
 
 <a name="GltfView"></a>
@@ -1361,3 +1364,155 @@ Khronos test assets use test/onStart, test/onFail and test/onSuccess.
 Clears all custom event listeners from the decorator.
 
 **Kind**: instance method of [<code>GraphController</code>](#GraphController)  
+<a name="PhysicsController"></a>
+
+## PhysicsController
+Controller for managing the physics simulation of a glTF scene.
+
+**Kind**: global class  
+
+* [PhysicsController](#PhysicsController)
+    * [.initializeEngine(engine)](#PhysicsController+initializeEngine)
+    * [.loadScene(state, sceneIndex)](#PhysicsController+loadScene)
+    * [.resetScene(gltf)](#PhysicsController+resetScene)
+    * [.resumeSimulation()](#PhysicsController+resumeSimulation)
+    * [.pauseSimulation()](#PhysicsController+pauseSimulation)
+    * [.simulateStep(state, deltaTime)](#PhysicsController+simulateStep)
+    * [.enableDebugColliders(enable)](#PhysicsController+enableDebugColliders)
+    * [.enableDebugJoints(enable)](#PhysicsController+enableDebugJoints)
+    * [.applyImpulse(nodeIndex, linearImpulse, angularImpulse)](#PhysicsController+applyImpulse)
+    * [.applyPointImpulse(nodeIndex, impulse, position)](#PhysicsController+applyPointImpulse)
+    * [.rayCast(rayStart, rayEnd)](#PhysicsController+rayCast) ⇒ <code>Object</code>
+
+<a name="PhysicsController+initializeEngine"></a>
+
+### physicsController.initializeEngine(engine)
+Initializes the physics engine. This must be called before loading any scenes.
+Currently, only "NvidiaPhysX" is supported.
+
+**Kind**: instance method of [<code>PhysicsController</code>](#PhysicsController)  
+
+| Param | Type |
+| --- | --- |
+| engine | <code>string</code> | 
+
+<a name="PhysicsController+loadScene"></a>
+
+### physicsController.loadScene(state, sceneIndex)
+Resets the current physics state and loads the physics data for a given scene and initializes the physics simulation.
+The first two frames of the simulation are skipped to allow the physics engine to initialize before applying any physics updates.
+Resets all dirty flags.
+
+**Kind**: instance method of [<code>PhysicsController</code>](#PhysicsController)  
+
+| Param | Type |
+| --- | --- |
+| state | [<code>GltfState</code>](#GltfState) | 
+| sceneIndex | <code>number</code> | 
+
+<a name="PhysicsController+resetScene"></a>
+
+### physicsController.resetScene(gltf)
+Resets the current physics state.
+
+**Kind**: instance method of [<code>PhysicsController</code>](#PhysicsController)  
+
+| Param | Type |
+| --- | --- |
+| gltf | <code>glTF</code> | 
+
+<a name="PhysicsController+resumeSimulation"></a>
+
+### physicsController.resumeSimulation()
+Resumes the physics simulation if it was paused. If the simulation is not paused, this function does nothing.
+
+**Kind**: instance method of [<code>PhysicsController</code>](#PhysicsController)  
+<a name="PhysicsController+pauseSimulation"></a>
+
+### physicsController.pauseSimulation()
+Pauses the physics simulation. If the simulation is already paused, this function does nothing.
+
+**Kind**: instance method of [<code>PhysicsController</code>](#PhysicsController)  
+<a name="PhysicsController+simulateStep"></a>
+
+### physicsController.simulateStep(state, deltaTime)
+Simulates a single step of the physics simulation,
+if the initial loading is done.
+A step will only be simulated if enough time has passed since the last simulated step,
+based on the configured simulation step time.
+Can also be used to manually advance the simulation when it is paused.
+
+**Kind**: instance method of [<code>PhysicsController</code>](#PhysicsController)  
+
+| Param | Type |
+| --- | --- |
+| state | [<code>GltfState</code>](#GltfState) | 
+| deltaTime | <code>number</code> | 
+
+<a name="PhysicsController+enableDebugColliders"></a>
+
+### physicsController.enableDebugColliders(enable)
+Enable debug visualization of physics colliders.
+The exact visualization depends on the physics engine implementation.
+
+**Kind**: instance method of [<code>PhysicsController</code>](#PhysicsController)  
+
+| Param | Type |
+| --- | --- |
+| enable | <code>boolean</code> | 
+
+<a name="PhysicsController+enableDebugJoints"></a>
+
+### physicsController.enableDebugJoints(enable)
+Enable debug visualization of physics joints.
+The exact visualization depends on the physics engine implementation.
+
+**Kind**: instance method of [<code>PhysicsController</code>](#PhysicsController)  
+
+| Param | Type |
+| --- | --- |
+| enable | <code>boolean</code> | 
+
+<a name="PhysicsController+applyImpulse"></a>
+
+### physicsController.applyImpulse(nodeIndex, linearImpulse, angularImpulse)
+Applies a linear and/or angular impulse to the actor associated with the given node.
+An impulse causes an instantaneous change in the actor's velocity proportional to its mass.
+
+**Kind**: instance method of [<code>PhysicsController</code>](#PhysicsController)  
+
+| Param | Type | Description |
+| --- | --- | --- |
+| nodeIndex | <code>number</code> | glTF node index of the target dynamic actor. |
+| linearImpulse | <code>vec3</code> | Impulse vector applied to the center of mass, in world space (kg⋅m/s). |
+| angularImpulse | <code>vec3</code> | Angular impulse vector applied around the center of mass, in world space (kg⋅m²/s). |
+
+<a name="PhysicsController+applyPointImpulse"></a>
+
+### physicsController.applyPointImpulse(nodeIndex, impulse, position)
+Applies a linear impulse to the actor associated with the given node at a specific world-space position.
+Applying the impulse off-center will also induce a torque on the actor.
+
+**Kind**: instance method of [<code>PhysicsController</code>](#PhysicsController)  
+
+| Param | Type | Description |
+| --- | --- | --- |
+| nodeIndex | <code>number</code> | glTF node index of the target dynamic actor. |
+| impulse | <code>vec3</code> | Impulse vector to apply, in world space (kg⋅m/s). |
+| position | <code>vec3</code> | World-space position at which the impulse is applied. |
+
+<a name="PhysicsController+rayCast"></a>
+
+### physicsController.rayCast(rayStart, rayEnd) ⇒ <code>Object</code>
+Performs a ray-cast between two world-space points and returns information
+about the first shape hit.
+
+**Kind**: instance method of [<code>PhysicsController</code>](#PhysicsController)  
+**Returns**: <code>Object</code> - An object containing the index of the hit node (`-1` on miss), the normalised
+  hit fraction along the ray, and the surface normal at the hit point.  
+
+| Param | Type | Description |
+| --- | --- | --- |
+| rayStart | <code>Array.&lt;number&gt;</code> | World-space ray origin as `[x, y, z]`. |
+| rayEnd | <code>Array.&lt;number&gt;</code> | World-space ray terminus as `[x, y, z]`. |
+

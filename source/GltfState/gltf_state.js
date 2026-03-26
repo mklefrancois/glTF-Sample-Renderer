@@ -1,7 +1,7 @@
 import { GraphController } from "../gltf/interactivity.js";
 import { UserCamera } from "../gltf/user_camera.js";
 import { AnimationTimer } from "./animation_timer.js";
-import { PhysicsController } from "./phyiscs_controller.js";
+import { PhysicsController } from "./physics_controller.js";
 
 /**
  * GltfState containing a state for visualization in GltfView
