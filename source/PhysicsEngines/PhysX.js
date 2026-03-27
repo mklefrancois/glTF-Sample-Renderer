@@ -1015,6 +1015,9 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
             state.gltf.extensions.KHR_physics_rigid_bodies.physicsJoints[
                 jointNode.extensions.KHR_physics_rigid_bodies.joint.joint
             ];
+
+        const connectedNode = state.gltf.nodes[gltfJoint.connectedNode];
+
         const simplifiedJoints = gltfJoint.simplifiedPhysicsJoints;
         if (simplifiedJoints.length !== pxJoints.length) {
             console.warn(
@@ -1022,9 +1025,34 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
             );
             return;
         }
+
+        const hasJointSpaceChangedA = PhysicsUtils.hasJointSpaceChanged(jointNode);
+        const hasJointSpaceChangedB = PhysicsUtils.hasJointSpaceChanged(connectedNode);
+
         for (let i = 0; i < simplifiedJoints.length; i++) {
             const pxJoint = pxJoints[i];
             const simplifiedJoint = simplifiedJoints[i];
+            if (hasJointSpaceChangedA) {
+                const resultA = this.computeJointOffsetAndActor(jointNode, simplifiedJoint);
+                const pos = new this.PhysX.PxVec3(...resultA.offsetPosition);
+                const rot = new this.PhysX.PxQuat(...resultA.offsetRotation);
+                const poseA = new this.PhysX.PxTransform(pos, rot);
+                pxJoint.setLocalPose(this.PhysX.PxJointActorIndexEnum.eACTOR0, poseA);
+                this.PhysX.destroy(poseA);
+                this.PhysX.destroy(pos);
+                this.PhysX.destroy(rot);
+            }
+            if (hasJointSpaceChangedB) {
+                const resultB = this.computeJointOffsetAndActor(connectedNode, simplifiedJoint);
+                const posB = new this.PhysX.PxVec3(...resultB.offsetPosition);
+                const rotB = new this.PhysX.PxQuat(...resultB.offsetRotation);
+                const poseB = new this.PhysX.PxTransform(posB, rotB);
+                pxJoint.setLocalPose(this.PhysX.PxJointActorIndexEnum.eACTOR1, poseB);
+                this.PhysX.destroy(poseB);
+                this.PhysX.destroy(posB);
+                this.PhysX.destroy(rotB);
+            }
+
             if (
                 jointNode.extensions.KHR_physics_rigid_bodies.joint.animatedPropertyObjects
                     .enableCollision.dirty

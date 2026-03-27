@@ -89,8 +89,8 @@ class PhysicsUtils {
      * computing and storing the scaled physics transform for each non-motion node.
      * Stops traversal at nodes that carry motion data.
      *
-     * @param {object} gltf - The glTF asset containing the full node array.
-     * @param {object} node - The current node to process.
+     * @param {glTF} gltf - The glTF asset containing the full node array.
+     * @param {gltfNode} node - The current node to process.
      * @param {Float32Array} parentTransform - The 4x4 world transform of the parent node.
      */
     static applyTransformRecursively(gltf, node, parentTransform) {
@@ -105,6 +105,28 @@ class PhysicsUtils {
             const childNode = gltf.nodes[childIndex];
             this.applyTransformRecursively(gltf, childNode, globalTransform);
         }
+    }
+
+    /**
+     * Checks if the joint space of a joint node has changed by traversing up the hierarchy to find any dirty transforms.
+     * @param {gltfNode} jointNode
+     * @returns {boolean}
+     */
+    static hasJointSpaceChanged(jointNode) {
+        if (jointNode.dirtyTransform === false) {
+            return false;
+        }
+        let currentNode = jointNode;
+        while (
+            currentNode !== undefined &&
+            currentNode.extensions?.KHR_physics_rigid_bodies?.motion === undefined
+        ) {
+            if (currentNode.isLocalTransformDirty()) {
+                return true;
+            }
+            currentNode = currentNode.parent;
+        }
+        return false;
     }
 
     /**
