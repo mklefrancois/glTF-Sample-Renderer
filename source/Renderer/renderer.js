@@ -298,7 +298,8 @@ class gltfRenderer {
                 state.gltf.materials[primitive.material].alphaMode !== "BLEND" &&
                 (state.gltf.materials[primitive.material].extensions === undefined ||
                     state.gltf.materials[primitive.material].extensions
-                        .KHR_materials_transmission === undefined)
+                        .KHR_materials_transmission === undefined) &&
+                primitive.extensions?.KHR_gaussian_splatting === undefined
         );
 
         let counter = 0;
@@ -330,17 +331,19 @@ class gltfRenderer {
         // transparent drawables need sorting before they can be drawn
         this.transparentDrawables = drawables.filter(
             ({ primitive }) =>
-                state.gltf.materials[primitive.material].alphaMode === "BLEND" &&
-                (state.gltf.materials[primitive.material].extensions === undefined ||
-                    state.gltf.materials[primitive.material].extensions
-                        .KHR_materials_transmission === undefined)
+                (state.gltf.materials[primitive.material].alphaMode === "BLEND" &&
+                    (state.gltf.materials[primitive.material].extensions === undefined ||
+                        state.gltf.materials[primitive.material].extensions
+                            .KHR_materials_transmission === undefined)) ||
+                primitive.extensions?.KHR_gaussian_splatting !== undefined
         );
 
         this.transmissionDrawables = drawables.filter(
             ({ primitive }) =>
                 state.gltf.materials[primitive.material].extensions !== undefined &&
                 state.gltf.materials[primitive.material].extensions.KHR_materials_transmission !==
-                    undefined
+                    undefined &&
+                primitive.extensions?.KHR_gaussian_splatting === undefined
         );
 
         this.scatterDrawables = drawables.filter(
@@ -349,7 +352,8 @@ class gltfRenderer {
                 state.gltf.materials[primitive.material].extensions.KHR_materials_volume_scatter !==
                     undefined &&
                 state.gltf.materials[primitive.material].extensions.KHR_materials_volume !==
-                    undefined
+                    undefined &&
+                primitive.extensions?.KHR_gaussian_splatting === undefined
         );
     }
 
@@ -651,16 +655,23 @@ class gltfRenderer {
             this.transparentDrawables
         );
         for (const drawable of this.transparentDrawables.filter((a) => a.depth <= 0)) {
-            let renderpassConfiguration = {};
-            renderpassConfiguration.linearOutput = false;
-            renderpassConfiguration.frameBufferSize = [this.currentWidth, this.currentHeight];
-            this.drawPrimitive(
-                state,
-                renderpassConfiguration,
-                drawable.primitive,
-                drawable.node,
-                this.viewProjectionMatrix
-            );
+            if (
+                drawable.primitive.extensions?.KHR_gaussian_splatting !== undefined &&
+                state.renderingParameters.enabledExtensions.KHR_gaussian_splatting
+            ) {
+                //TODO
+            } else {
+                let renderpassConfiguration = {};
+                renderpassConfiguration.linearOutput = false;
+                renderpassConfiguration.frameBufferSize = [this.currentWidth, this.currentHeight];
+                this.drawPrimitive(
+                    state,
+                    renderpassConfiguration,
+                    drawable.primitive,
+                    drawable.node,
+                    this.viewProjectionMatrix
+                );
+            }
         }
     }
 

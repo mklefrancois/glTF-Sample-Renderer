@@ -55,12 +55,16 @@ class GltfState {
                 KHR_materials_specular: true,
                 /** KHR_materials_iridescence adds a thin-film iridescence effect */
                 KHR_materials_iridescence: true,
+                /** KHR_materials_diffuse_transmission */
                 KHR_materials_diffuse_transmission: true,
                 /** KHR_materials_anisotropy defines microfacet grooves in the surface, stretching the specular reflection on the surface */
                 KHR_materials_anisotropy: true,
                 /** KHR_materials_dispersion defines configuring the strength of the angular separation of colors (chromatic abberation)*/
                 KHR_materials_dispersion: true,
-                KHR_materials_emissive_strength: true
+                /** KHR_materials_emissive_strength allows configuring the strength of the emissive component */
+                KHR_materials_emissive_strength: true,
+                /** KHR_gaussian_splatting */
+                KHR_gaussian_splatting: true
             },
             /** clear color expressed as list of ints in the range [0, 255] */
             clearColor: [58, 64, 74, 255],

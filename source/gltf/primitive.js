@@ -34,8 +34,226 @@ class gltfPrimitive extends GltfObject {
         this.hasTexcoord = false;
         this.hasColor = false;
 
+        // Gaussian Splatting
+        this.hasDegree1 = false;
+        this.hasDegree2 = false;
+        this.hasDegree3 = false;
+        this.linear = true;
+        this.positionTextureInfo = undefined;
+        this.rotationTextureInfo = undefined;
+        this.scaleTextureInfo = undefined;
+        this.opacityTextureInfo = undefined;
+        this.sphericalHarmonicsTextureInfo = undefined;
+        this.sortOrder = undefined;
+
         // The primitive centroid is used for depth sorting.
         this.centroid = undefined;
+    }
+
+    //Currently only support types relevant for gaussian splatting
+    _getInternalTextureFormat(componentType, componentCount, normalized = false) {
+        if (componentType === GL.FLOAT) {
+            switch (componentCount) {
+                case 1: // OPACITIY
+                    return { internalFormat: GL.R32F, format: GL.RED };
+                case 3: // POSITION, SCALE, Spherical Harmonics
+                    return { internalFormat: GL.RGB32F, format: GL.RGB };
+                case 4: // ROTATION
+                    return { internalFormat: GL.RGBA32F, format: GL.RGBA };
+            }
+        }
+        if (componentType === GL.UNSIGNED_BYTE) {
+            switch (componentCount) {
+                case 1: // OPACITY
+                    return { internalFormat: GL.R8, format: GL.RED }; // Opacity is always normalized
+                case 3: // POSITION, SCALE
+                    return {
+                        internalFormat: normalized ? GL.RGB8 : GL.RGB8UI,
+                        format: normalized ? GL.RGB : GL.RGB_INTEGER
+                    };
+            }
+        }
+        if (componentType === GL.BYTE) {
+            switch (componentCount) {
+                case 3: // POSITION
+                    return {
+                        internalFormat: normalized ? GL.RGB8_SNORM : GL.RGB8I,
+                        format: normalized ? GL.RGB : GL.RGB_INTEGER
+                    };
+                case 4: // ROTATION
+                    return { internalFormat: GL.RGBA8_SNORM, format: GL.RGBA }; // Rotation is always normalized
+            }
+        }
+
+        // There is no normalized format for unsigned short and short. Needs to be resolved in the shader
+        if (componentType === GL.UNSIGNED_SHORT) {
+            switch (componentCount) {
+                case 1: // OPACITY
+                    return { internalFormat: GL.R16UI, format: GL.RED_INTEGER };
+                case 3: // POSITION, SCALE
+                    return { internalFormat: GL.RGB16UI, format: GL.RGB_INTEGER };
+            }
+        }
+        if (componentType === GL.SHORT) {
+            switch (componentCount) {
+                case 3: // POSITION
+                    return { internalFormat: GL.RGB16I, format: GL.RGB_INTEGER };
+                case 4: // ROTATION
+                    return { internalFormat: GL.RGBA16I, format: GL.RGBA_INTEGER };
+            }
+        }
+        console.error(
+            "Unsupported texture format for componentType:",
+            componentType,
+            "and componentCount:",
+            componentCount
+        );
+        return undefined;
+    }
+
+    _createDataTexture(gltf, webGlContext, attributeName, accessor) {
+        let texture = webGlContext.createTexture();
+        webGlContext.bindTexture(webGlContext.TEXTURE_2D, texture);
+        // Set texture format and upload data.
+        const componentType = accessor.componentType;
+        const componentCount = accessor.getComponentCount(accessor.type);
+        const formats = this._getInternalTextureFormat(
+            componentType,
+            componentCount,
+            accessor.normalized
+        );
+        if (
+            formats.format === GL.RED_INTEGER ||
+            formats.format === GL.RGB_INTEGER ||
+            formats.format === GL.RGBA_INTEGER
+        ) {
+            this.defines.push(`${attributeName}_IS_INTEGER 1`);
+            if (accessor.normalized) {
+                this.defines.push(`${attributeName}_NEEDS_NORMALIZATION 1`);
+            }
+        } else {
+            this.defines.push(`${attributeName}_IS_FLOAT 1`);
+        }
+        const size = Math.ceil(Math.sqrt(accessor.count));
+        const data = accessor.getDeinterlacedView(gltf);
+        const paddedData = new data.constructor(size * size * componentCount);
+        paddedData.set(data);
+        webGlContext.texImage2D(
+            webGlContext.TEXTURE_2D,
+            0, //level
+            formats.internalFormat,
+            size,
+            size,
+            0, //border
+            formats.format,
+            accessor.componentType,
+            paddedData
+        );
+        // Ensure mipmapping is disabled and the sampler is configured correctly.
+        webGlContext.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_WRAP_S, GL.CLAMP_TO_EDGE);
+        webGlContext.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_WRAP_T, GL.CLAMP_TO_EDGE);
+        webGlContext.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_MIN_FILTER, GL.NEAREST);
+        webGlContext.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_MAG_FILTER, GL.NEAREST);
+
+        // Now we add the morph target texture as a gltf texture info resource, so that
+        // we can just call webGl.setTexture(..., gltfTextureInfo, ...) in the renderer.
+        const image = new gltfImage(
+            undefined, // uri
+            GL.TEXTURE_2D, // type
+            0, // mip level
+            undefined, // buffer view
+            undefined, // name
+            ImageMimeType.GLTEXTURE, // mimeType
+            texture // image
+        );
+        gltf.images.push(image);
+
+        gltf.samplers.push(
+            new gltfSampler(GL.NEAREST, GL.NEAREST, GL.CLAMP_TO_EDGE, GL.CLAMP_TO_EDGE, undefined)
+        );
+
+        const tex = new gltfTexture(
+            gltf.samplers.length - 1,
+            gltf.images.length - 1,
+            GL.TEXTURE_2D
+        );
+        // The webgl texture is already initialized -> this flag informs
+        // webgl.setTexture about this.
+        tex.initialized = true;
+
+        gltf.textures.push(tex);
+
+        const textureInfo = new gltfTextureInfo(gltf.textures.length - 1, 0, true);
+        textureInfo.samplerName = `u_${attributeName}Sampler`; //TODO Check if this works
+        textureInfo.generateMips = false;
+        return textureInfo;
+    }
+
+    _createDataTextureArray(
+        gltf,
+        webGlContext,
+        data,
+        width,
+        textureCount,
+        componentCount,
+        samplerName
+    ) {
+        let texture = webGlContext.createTexture();
+        webGlContext.bindTexture(webGlContext.TEXTURE_2D_ARRAY, texture);
+        // Set texture format and upload data.
+        let internalFormat = componentCount === 4 ? webGlContext.RGBA32F : webGlContext.RGB32F;
+        let format = componentCount === 4 ? webGlContext.RGBA : webGlContext.RGB;
+        let type = webGlContext.FLOAT;
+        webGlContext.texImage3D(
+            webGlContext.TEXTURE_2D_ARRAY,
+            0, //level
+            internalFormat,
+            width,
+            width,
+            textureCount, //Layer count
+            0, //border
+            format,
+            type,
+            data
+        );
+        // Ensure mipmapping is disabled and the sampler is configured correctly.
+        webGlContext.texParameteri(GL.TEXTURE_2D_ARRAY, GL.TEXTURE_WRAP_S, GL.CLAMP_TO_EDGE);
+        webGlContext.texParameteri(GL.TEXTURE_2D_ARRAY, GL.TEXTURE_WRAP_T, GL.CLAMP_TO_EDGE);
+        webGlContext.texParameteri(GL.TEXTURE_2D_ARRAY, GL.TEXTURE_MIN_FILTER, GL.NEAREST);
+        webGlContext.texParameteri(GL.TEXTURE_2D_ARRAY, GL.TEXTURE_MAG_FILTER, GL.NEAREST);
+
+        // Now we add the morph target texture as a gltf texture info resource, so that
+        // we can just call webGl.setTexture(..., gltfTextureInfo, ...) in the renderer.
+        const image = new gltfImage(
+            undefined, // uri
+            GL.TEXTURE_2D_ARRAY, // type
+            0, // mip level
+            undefined, // buffer view
+            undefined, // name
+            ImageMimeType.GLTEXTURE, // mimeType
+            texture // image
+        );
+        gltf.images.push(image);
+
+        gltf.samplers.push(
+            new gltfSampler(GL.NEAREST, GL.NEAREST, GL.CLAMP_TO_EDGE, GL.CLAMP_TO_EDGE, undefined)
+        );
+
+        const tex = new gltfTexture(
+            gltf.samplers.length - 1,
+            gltf.images.length - 1,
+            GL.TEXTURE_2D_ARRAY
+        );
+        // The webgl texture is already initialized -> this flag informs
+        // webgl.setTexture about this.
+        tex.initialized = true;
+
+        gltf.textures.push(tex);
+
+        const textureInfo = new gltfTextureInfo(gltf.textures.length - 1, 0, true);
+        textureInfo.generateMips = false;
+        textureInfo.samplerName = samplerName;
+        return textureInfo;
     }
 
     initGl(gltf, webGlContext) {
@@ -92,6 +310,7 @@ class gltfPrimitive extends GltfObject {
                 break;
             }
             let knownAttribute = true;
+            let isTexture = false;
             switch (attribute) {
                 case "POSITION":
                     this.skip = false;
@@ -123,11 +342,43 @@ class gltfPrimitive extends GltfObject {
                 case "WEIGHTS_1":
                     this.hasWeights = true;
                     break;
+                case "KHR_gaussian_splatting:ROTATION":
+                case "KHR_gaussian_splatting:SCALE":
+                case "KHR_gaussian_splatting:OPACITY":
+                    isTexture = true;
+                    break;
+                case "KHR_gaussian_splatting:SH_DEGREE_0_COEF_0":
+                    isTexture = true;
+                    break;
+                case "KHR_gaussian_splatting:SH_DEGREE_1_COEF_0":
+                case "KHR_gaussian_splatting:SH_DEGREE_1_COEF_1":
+                case "KHR_gaussian_splatting:SH_DEGREE_1_COEF_2":
+                    isTexture = true;
+                    this.hasDegree1 = true;
+                    break;
+                case "KHR_gaussian_splatting:SH_DEGREE_2_COEF_0":
+                case "KHR_gaussian_splatting:SH_DEGREE_2_COEF_1":
+                case "KHR_gaussian_splatting:SH_DEGREE_2_COEF_2":
+                case "KHR_gaussian_splatting:SH_DEGREE_2_COEF_3":
+                case "KHR_gaussian_splatting:SH_DEGREE_2_COEF_4":
+                    isTexture = true;
+                    this.hasDegree2 = true;
+                    break;
+                case "KHR_gaussian_splatting:SH_DEGREE_3_COEF_0":
+                case "KHR_gaussian_splatting:SH_DEGREE_3_COEF_1":
+                case "KHR_gaussian_splatting:SH_DEGREE_3_COEF_2":
+                case "KHR_gaussian_splatting:SH_DEGREE_3_COEF_3":
+                case "KHR_gaussian_splatting:SH_DEGREE_3_COEF_4":
+                case "KHR_gaussian_splatting:SH_DEGREE_3_COEF_5":
+                case "KHR_gaussian_splatting:SH_DEGREE_3_COEF_6":
+                    isTexture = true;
+                    this.hasDegree3 = true;
+                    break;
                 default:
                     knownAttribute = false;
                     console.log("Unknown attribute: " + attribute);
             }
-            if (knownAttribute) {
+            if (knownAttribute && !isTexture) {
                 const idx = this.attributes[attribute];
                 this.glAttributes.push({
                     attribute: attribute,
@@ -136,6 +387,122 @@ class gltfPrimitive extends GltfObject {
                 });
                 this.defines.push(`HAS_${attribute}_${gltf.accessors[idx].type} 1`);
             }
+        }
+
+        // Gaussian Splatting
+        if (this.extensions?.KHR_gaussian_splatting !== undefined) {
+            const extension = this.extensions.KHR_gaussian_splatting;
+            if (extension.kernel !== "ellipse") {
+                console.warn(
+                    `Unsupported kernel type for Gaussian Splatting: ${extension.kernel}. Using ellipse kernel.`
+                );
+            }
+            if (extension.colorSpace === "srgb_rec_709_display") {
+                this.linear = false;
+            } else if (extension.colorSpace !== "lin_rec709_display") {
+                console.warn(
+                    `Unsupported color space for Gaussian Splatting: ${extension.colorSpace}. Using linear Rec. 709 display.`
+                );
+            }
+            if (extension.projection !== undefined && extension.projection !== "perspective") {
+                console.warn(
+                    `Unsupported projection type for Gaussian Splatting: ${extension.projection}. Using perspective projection.`
+                );
+            }
+            if (
+                extension.sortingMethod !== undefined &&
+                extension.sortingMethod !== "cameraDistance"
+            ) {
+                console.warn(
+                    `Unsupported sorting method for Gaussian Splatting: ${extension.sortingMethod}. Using camera distance.`
+                );
+            }
+            if (this.hasDegree2 && !this.hasDegree1) {
+                console.warn(
+                    "Degree 2 SH Coefficients provided without Degree 1. This is not supported and Degree 2 coefficients will be ignored."
+                );
+                this.hasDegree2 = false;
+            }
+            if (this.hasDegree3 && (!this.hasDegree1 || !this.hasDegree2)) {
+                console.warn(
+                    "Degree 3 SH Coefficients provided without Degree 1 or Degree 2. This is not supported and Degree 3 coefficients will be ignored."
+                );
+                this.hasDegree3 = false;
+            }
+
+            const max2DTextureSize = Math.pow(webGlContext.getParameter(GL.MAX_TEXTURE_SIZE), 2);
+            const vertexCount =
+                gltf.accessors[this.attributes["KHR_gaussian_splatting:SH_DEGREE_0_COEF_0"]].count;
+            const singleTextureWidth = Math.ceil(Math.sqrt(vertexCount));
+            const singleTextureSize = Math.pow(singleTextureWidth, 2);
+
+            if (vertexCount > max2DTextureSize) {
+                console.error("Vertex count exceeds maximum 2D texture size.");
+                return;
+            }
+
+            this.positionTextureInfo = this._createDataTexture(
+                gltf,
+                webGlContext,
+                "POSITION",
+                gltf.accessors[this.attributes.POSITION]
+            );
+
+            this.rotationTextureInfo = this._createDataTexture(
+                gltf,
+                webGlContext,
+                "KHR_gaussian_splatting_ROTATION",
+                gltf.accessors[this.attributes["KHR_gaussian_splatting:ROTATION"]]
+            );
+
+            this.scaleTextureInfo = this._createDataTexture(
+                gltf,
+                webGlContext,
+                "KHR_gaussian_splatting_SCALE",
+                gltf.accessors[this.attributes["KHR_gaussian_splatting:SCALE"]]
+            );
+
+            this.opacityTextureInfo = this._createDataTexture(
+                gltf,
+                webGlContext,
+                "KHR_gaussian_splatting_OPACITY",
+                gltf.accessors[this.attributes["KHR_gaussian_splatting:OPACITY"]]
+            );
+
+            let textureAtlasSize = 1;
+            if (this.hasDegree1) {
+                this.defines.push("HAS_GAUSSIAN_SPLATTING_DEGREE_1 1");
+                textureAtlasSize += 3;
+                if (this.hasDegree2) {
+                    this.defines.push("HAS_GAUSSIAN_SPLATTING_DEGREE_2 1");
+                    textureAtlasSize += 5;
+                    if (this.hasDegree3) {
+                        this.defines.push("HAS_GAUSSIAN_SPLATTING_DEGREE_3 1");
+                        textureAtlasSize += 7;
+                    }
+                }
+            }
+            const shData = new Float32Array(singleTextureSize * textureAtlasSize * 3);
+            const shAttributes = Object.keys(this.attributes)
+                .filter((attr) => attr.startsWith("KHR_gaussian_splatting:SH_DEGREE_"))
+                .sort();
+            for (let i = 0; i < shAttributes.length; i++) {
+                const accessor = gltf.accessors[this.attributes[shAttributes[i]]];
+                const data = accessor.getDeinterlacedView(gltf);
+                shData.set(data, i * singleTextureSize * 3);
+            }
+            this._createDataTextureArray(
+                gltf,
+                webGlContext,
+                shData,
+                singleTextureWidth,
+                textureAtlasSize,
+                3,
+                "u_SHCoefficients"
+            );
+
+            this.sortOrder = new Uint32Array(vertexCount);
+            for (let i = 0; i < vertexCount; i++) this.sortOrder[i] = i;
         }
 
         // MORPH TARGETS
@@ -237,83 +604,15 @@ class gltfPrimitive extends GltfObject {
                 }
 
                 // Add the morph target texture.
-                // We have to create a WebGL2 texture as the format of the
-                // morph target texture has to be explicitly specified
-                // (gltf image would assume uint8).
-                let texture = webGlContext.createTexture();
-                webGlContext.bindTexture(webGlContext.TEXTURE_2D_ARRAY, texture);
-                // Set texture format and upload data.
-                let internalFormat = webGlContext.RGBA32F;
-                let format = webGlContext.RGBA;
-                let type = webGlContext.FLOAT;
-                let data = morphTargetTextureArray;
-                webGlContext.texImage3D(
-                    webGlContext.TEXTURE_2D_ARRAY,
-                    0, //level
-                    internalFormat,
+                this._createDataTextureArray(
+                    gltf,
+                    webGlContext,
+                    morphTargetTextureArray,
                     width,
-                    width,
-                    targetCount * attributes.length, //Layer count
-                    0, //border
-                    format,
-                    type,
-                    data
+                    targetCount * attributes.length,
+                    4,
+                    "u_MorphTargetsSampler"
                 );
-                // Ensure mipmapping is disabled and the sampler is configured correctly.
-                webGlContext.texParameteri(
-                    GL.TEXTURE_2D_ARRAY,
-                    GL.TEXTURE_WRAP_S,
-                    GL.CLAMP_TO_EDGE
-                );
-                webGlContext.texParameteri(
-                    GL.TEXTURE_2D_ARRAY,
-                    GL.TEXTURE_WRAP_T,
-                    GL.CLAMP_TO_EDGE
-                );
-                webGlContext.texParameteri(GL.TEXTURE_2D_ARRAY, GL.TEXTURE_MIN_FILTER, GL.NEAREST);
-                webGlContext.texParameteri(GL.TEXTURE_2D_ARRAY, GL.TEXTURE_MAG_FILTER, GL.NEAREST);
-
-                // Now we add the morph target texture as a gltf texture info resource, so that
-                // we can just call webGl.setTexture(..., gltfTextureInfo, ...) in the renderer.
-                const morphTargetImage = new gltfImage(
-                    undefined, // uri
-                    GL.TEXTURE_2D_ARRAY, // type
-                    0, // mip level
-                    undefined, // buffer view
-                    undefined, // name
-                    ImageMimeType.GLTEXTURE, // mimeType
-                    texture // image
-                );
-                gltf.images.push(morphTargetImage);
-
-                gltf.samplers.push(
-                    new gltfSampler(
-                        GL.NEAREST,
-                        GL.NEAREST,
-                        GL.CLAMP_TO_EDGE,
-                        GL.CLAMP_TO_EDGE,
-                        undefined
-                    )
-                );
-
-                const morphTargetTexture = new gltfTexture(
-                    gltf.samplers.length - 1,
-                    gltf.images.length - 1,
-                    GL.TEXTURE_2D_ARRAY
-                );
-                // The webgl texture is already initialized -> this flag informs
-                // webgl.setTexture about this.
-                morphTargetTexture.initialized = true;
-
-                gltf.textures.push(morphTargetTexture);
-
-                this.morphTargetTextureInfo = new gltfTextureInfo(
-                    gltf.textures.length - 1,
-                    0,
-                    true
-                );
-                this.morphTargetTextureInfo.samplerName = "u_MorphTargetsSampler";
-                this.morphTargetTextureInfo.generateMips = false;
             } else {
                 console.warn("Mesh of Morph targets too big. Cannot apply morphing.");
             }
