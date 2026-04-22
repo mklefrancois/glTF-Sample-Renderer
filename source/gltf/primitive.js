@@ -112,6 +112,9 @@ class gltfPrimitive extends GltfObject {
     }
 
     _createDataTexture(gltf, webGlContext, attributeName, accessor) {
+        if (accessor === undefined) {
+            return undefined;
+        }
         let texture = webGlContext.createTexture();
         webGlContext.bindTexture(webGlContext.TEXTURE_2D, texture);
         // Set texture format and upload data.
@@ -438,6 +441,7 @@ class gltfPrimitive extends GltfObject {
 
             if (vertexCount > max2DTextureSize) {
                 console.error("Vertex count exceeds maximum 2D texture size.");
+                this.skip = true;
                 return;
             }
 
@@ -455,6 +459,14 @@ class gltfPrimitive extends GltfObject {
                 gltf.accessors[this.attributes["KHR_gaussian_splatting:ROTATION"]]
             );
 
+            if (this.rotationTextureInfo === undefined) {
+                console.error(
+                    "Rotation attribute is required for Gaussian Splatting but not found. Skipping primitive."
+                );
+                this.skip = true;
+                return;
+            }
+
             this.scaleTextureInfo = this._createDataTexture(
                 gltf,
                 webGlContext,
@@ -462,12 +474,36 @@ class gltfPrimitive extends GltfObject {
                 gltf.accessors[this.attributes["KHR_gaussian_splatting:SCALE"]]
             );
 
+            if (this.scaleTextureInfo === undefined) {
+                console.error(
+                    "Scale attribute is required for Gaussian Splatting but not found. Skipping primitive."
+                );
+                this.skip = true;
+                return;
+            }
+
             this.opacityTextureInfo = this._createDataTexture(
                 gltf,
                 webGlContext,
                 "KHR_gaussian_splatting_OPACITY",
                 gltf.accessors[this.attributes["KHR_gaussian_splatting:OPACITY"]]
             );
+
+            if (this.opacityTextureInfo === undefined) {
+                console.error(
+                    "Opacity attribute is required for Gaussian Splatting but not found. Skipping primitive."
+                );
+                this.skip = true;
+                return;
+            }
+
+            if (this.attributes["KHR_gaussian_splatting:SH_DEGREE_0_COEF_0"] === undefined) {
+                console.error(
+                    "SH Degree 0 Coefficient 0 attribute is required for Gaussian Splatting but not found. Skipping primitive."
+                );
+                this.skip = true;
+                return;
+            }
 
             let textureAtlasSize = 1;
             if (this.hasDegree1) {
