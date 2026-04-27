@@ -1,6 +1,6 @@
-import { getContainingFolder } from "./utils.js";
 import { GltfObject } from "./gltf_object.js";
 import { hasMeshOptCompression } from "./extension_utils.js";
+import { ResourceLoaderUtils } from "../ResourceLoader/loader_utils.js";
 
 class gltfBuffer extends GltfObject {
     static animatedProperties = [];
@@ -14,7 +14,7 @@ class gltfBuffer extends GltfObject {
         this.buffer = undefined; // raw data blob
     }
 
-    load(gltf, additionalFiles = undefined) {
+    load(gltf, additionalFiles = undefined, allowResourceAbsolutePath = true) {
         if (this.buffer !== undefined) {
             console.error("buffer has already been loaded");
             return;
@@ -23,50 +23,66 @@ class gltfBuffer extends GltfObject {
         const self = this;
         return new Promise(function (resolve, reject) {
             if (
-                !self.setBufferFromFiles(additionalFiles, resolve) &&
-                !self.setBufferFromUri(gltf, resolve, reject)
+                !self.setBufferFromFiles(gltf, additionalFiles, resolve) &&
+                !self.setBufferFromUri(gltf, resolve, reject, allowResourceAbsolutePath)
             ) {
                 if (hasMeshOptCompression(self)) {
                     // buffer will be loaded by EXT_meshopt_compression or KHR_meshopt_compression
                     resolve();
                 } else {
                     // if buffer has no meshopt compression extension AND no uri or files provided, we have an error
-                    console.error("Was not able to resolve buffer with uri '%s'", self.uri);
                     reject("Buffer data missing for '" + self.name + "' in " + gltf.path);
                 }
             }
         });
     }
 
-    setBufferFromUri(gltf, resolve, reject) {
+    setBufferFromUri(gltf, resolve, reject, allowResourceAbsolutePath) {
         if (this.uri === undefined) {
             return false;
         }
-        const parentPath = this.uri.startsWith("data:") ? "" : getContainingFolder(gltf.path);
-        fetch(parentPath + this.uri).then((response) => {
-            if (!response.ok) {
-                reject(
-                    `Failed to fetch buffer from ${parentPath + this.uri}: ${response.statusText}`
-                );
-                return;
-            }
-            response.arrayBuffer().then((buffer) => {
-                this.buffer = buffer;
-                resolve();
+        if (!allowResourceAbsolutePath && ResourceLoaderUtils.isAbsoluteUrl(this.uri)) {
+            reject("Absolute URLs are not allowed for security reasons: " + this.uri);
+            return true; // we return true, because the buffer has a uri, but we reject the loading due to security reasons
+        }
+        const parentPath = this.uri.startsWith("data:")
+            ? ""
+            : ResourceLoaderUtils.getContainingFolder(gltf.path ?? "");
+        fetch(parentPath + this.uri)
+            .then((response) => {
+                if (!response.ok) {
+                    reject(
+                        `Failed to fetch buffer from ${parentPath + this.uri}: ${response.statusText}`
+                    );
+                    return;
+                }
+                response.arrayBuffer().then((buffer) => {
+                    this.buffer = buffer;
+                    resolve();
+                });
+            })
+            .catch((error) => {
+                reject(`Error fetching buffer from ${parentPath + this.uri}: ${error}`);
             });
-        });
 
         return true;
     }
 
-    setBufferFromFiles(files, callback) {
+    setBufferFromFiles(gltf, files, callback) {
         if (this.uri === undefined || files === undefined) {
             return false;
         }
+        let actualPath = this.uri;
+        if (!ResourceLoaderUtils.isAbsoluteUrl(this.uri)) {
+            const parentPath = ResourceLoaderUtils.getContainingFolder(gltf.path ?? "");
+            actualPath = ResourceLoaderUtils.cleanRelativePath(parentPath + this.uri);
+        }
 
-        const foundFile = files.find(
-            (file) => file[1].name === this.uri || file[1].fullPath === this.uri
-        );
+        const foundFile = files.find((file) => {
+            if (file[0] == actualPath) {
+                return true;
+            }
+        });
 
         if (foundFile === undefined) {
             return false;

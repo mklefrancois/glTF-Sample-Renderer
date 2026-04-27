@@ -87,7 +87,12 @@ class GltfView {
      */
     gatherStatistics(state) {
         if (state.gltf === undefined) {
-            return;
+            return {
+                meshCount: 0,
+                faceCount: 0,
+                opaqueMaterialsCount: 0,
+                transparentMaterialsCount: 0
+            };
         }
 
         // gather information from the active scene

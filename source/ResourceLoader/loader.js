@@ -1,12 +1,21 @@
 class gltfLoader {
-    static async load(gltf, webGlContext, appendix = undefined) {
+    static async load(gltf, webGlContext, appendix = undefined, allowResourceAbsolutePath = true) {
         const buffers = gltfLoader.getBuffers(appendix);
         const additionalFiles = gltfLoader.getAdditionalFiles(appendix);
 
-        const buffersPromise = gltfLoader.loadBuffers(gltf, buffers, additionalFiles);
+        const buffersPromise = gltfLoader.loadBuffers(
+            gltf,
+            buffers,
+            additionalFiles,
+            allowResourceAbsolutePath
+        );
 
         await buffersPromise; // images might be stored in the buffers
-        const imagesPromise = gltfLoader.loadImages(gltf, additionalFiles);
+        const imagesPromise = gltfLoader.loadImages(
+            gltf,
+            additionalFiles,
+            allowResourceAbsolutePath
+        );
 
         return await Promise.all([buffersPromise, imagesPromise]).then(() =>
             gltf.initGl(webGlContext)
@@ -50,7 +59,7 @@ class gltfLoader {
         }
     }
 
-    static loadBuffers(gltf, buffers, additionalFiles) {
+    static loadBuffers(gltf, buffers, additionalFiles, allowResourceAbsolutePath) {
         const promises = [];
 
         if (buffers !== undefined && buffers[0] !== undefined) {
@@ -63,20 +72,22 @@ class gltfLoader {
 
             gltf.buffers[0].buffer = buffers[0];
             for (let i = 1; i < gltf.buffers.length; ++i) {
-                promises.push(gltf.buffers[i].load(gltf, additionalFiles));
+                promises.push(
+                    gltf.buffers[i].load(gltf, additionalFiles, allowResourceAbsolutePath)
+                );
             }
         } else {
             for (const buffer of gltf.buffers) {
-                promises.push(buffer.load(gltf, additionalFiles));
+                promises.push(buffer.load(gltf, additionalFiles, allowResourceAbsolutePath));
             }
         }
         return Promise.all(promises);
     }
 
-    static loadImages(gltf, additionalFiles) {
+    static loadImages(gltf, additionalFiles, allowResourceAbsolutePath) {
         const imagePromises = [];
         for (let image of gltf.images) {
-            imagePromises.push(image.load(gltf, additionalFiles));
+            imagePromises.push(image.load(gltf, additionalFiles, allowResourceAbsolutePath));
         }
         return Promise.all(imagePromises);
     }

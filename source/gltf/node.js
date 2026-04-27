@@ -104,6 +104,10 @@ class gltfNode extends GltfObject {
     }
 
     getLocalTransform() {
+        // Matrices are never animated, so if a matrix is present we can just use it directly
+        if (this.matrix !== undefined) {
+            return this.matrix;
+        }
         return mat4.fromRotationTranslationScale(
             mat4.create(),
             this.rotation,
