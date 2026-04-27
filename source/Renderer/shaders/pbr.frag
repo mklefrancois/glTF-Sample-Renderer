@@ -179,6 +179,7 @@ void main()
     diffuseTransmissionIBL = getDiffuseLight(-n) * materialInfo.diffuseTransmissionColorFactor;
 #ifdef MATERIAL_VOLUME
         diffuseTransmissionIBL = applyVolumeAttenuation(diffuseTransmissionIBL, diffuseTransmissionThickness, materialInfo.attenuationColor, materialInfo.attenuationDistance);
+        diffuseTransmissionIBL *= materialInfo.diffuseTransmissionColorFactor; // Assume the same texture value for front and back faces
 #endif
     f_diffuse = mix(f_diffuse, diffuseTransmissionIBL, materialInfo.diffuseTransmissionFactor);
 #endif
@@ -295,6 +296,7 @@ void main()
 
 #ifdef MATERIAL_VOLUME
             l_diffuse_btdf = applyVolumeAttenuation(l_diffuse_btdf, diffuseTransmissionThickness, materialInfo.attenuationColor, materialInfo.attenuationDistance);
+            l_diffuse_btdf *= materialInfo.diffuseTransmissionColorFactor; // Assume the same texture value for front and back faces
 #endif
             l_diffuse += l_diffuse_btdf * materialInfo.diffuseTransmissionFactor;
         }
