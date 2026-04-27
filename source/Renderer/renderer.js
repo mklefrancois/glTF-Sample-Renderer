@@ -19,6 +19,8 @@ import cubemapVertShader from "./shaders/cubemap.vert";
 import cubemapFragShader from "./shaders/cubemap.frag";
 import scatterShader from "./shaders/scatter.frag";
 import specularGlossinesShader from "./shaders/specular_glossiness.frag";
+import splatVertexShader from "./shaders/splat.vert";
+import splatFragmentShader from "./shaders/splat.frag";
 import { gltfLight } from "../gltf/light.js";
 import { jsToGl } from "../gltf/utils.js";
 import { gltfMaterial } from "../gltf/material.js";
@@ -61,6 +63,8 @@ class gltfRenderer {
         shaderSources.set("cubemap.vert", cubemapVertShader);
         shaderSources.set("cubemap.frag", cubemapFragShader);
         shaderSources.set("specular_glossiness.frag", specularGlossinesShader);
+        shaderSources.set("splat.vert", splatVertexShader);
+        shaderSources.set("splat.frag", splatFragmentShader);
 
         this.shaderCache = new ShaderCache(shaderSources, this.webGl);
 
@@ -86,6 +90,9 @@ class gltfRenderer {
 
         this.maxVertAttributes = undefined;
         this.instanceBuffer = undefined;
+
+        this.splatVBO = undefined;
+        this.currentSortBuffer = undefined;
     }
 
     /////////////////////////////////////////////////////////////////////
@@ -180,6 +187,14 @@ class gltfRenderer {
             context.framebufferTexture2D(context.FRAMEBUFFER, context.DEPTH_ATTACHMENT, context.TEXTURE_2D, this.opaqueDepthTexture, 0);
             context.viewport(0, 0, this.opaqueFramebufferWidth, this.opaqueFramebufferHeight);
             context.bindFramebuffer(context.FRAMEBUFFER, null);
+
+            const quatVertices = new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]);
+            this.splatVBO = context.createBuffer();
+            context.bindBuffer(context.ARRAY_BUFFER, this.splatVBO);
+            context.bufferData(context.ARRAY_BUFFER, quatVertices, context.STATIC_DRAW);
+            context.bindBuffer(context.ARRAY_BUFFER, null);
+
+            this.currentSortBuffer = context.createBuffer();
 
             this.maxVertAttributes = context.getParameter(context.MAX_VERTEX_ATTRIBS);
 
@@ -659,7 +674,13 @@ class gltfRenderer {
                 drawable.primitive.extensions?.KHR_gaussian_splatting !== undefined &&
                 state.renderingParameters.enabledExtensions.KHR_gaussian_splatting
             ) {
-                //TODO
+                this.drawSplat(
+                    state,
+                    drawable.primitive,
+                    drawable.node,
+                    this.projMatrix,
+                    this.viewMatrix
+                );
             } else {
                 let renderpassConfiguration = {};
                 renderpassConfiguration.linearOutput = false;
@@ -673,6 +694,104 @@ class gltfRenderer {
                 );
             }
         }
+    }
+
+    drawSplat(state, primitive, node, projectionMatrix, viewMatrix) {
+        if (primitive.skip) return;
+        let vertDefines = primitive.defines.slice();
+        if (primitive.linear === true) {
+            vertDefines.push("LINEAR_OUTPUT 1");
+        }
+
+        const fragmentHash = this.shaderCache.selectShader("splat.frag", vertDefines);
+        const vertexHash = this.shaderCache.selectShader("splat.vert", vertDefines);
+        if (fragmentHash && vertexHash) {
+            this.shader = this.shaderCache.getShaderProgram(fragmentHash, vertexHash);
+        }
+
+        if (this.shader === undefined) {
+            return;
+        }
+
+        this.webGl.context.useProgram(this.shader.program);
+
+        this.webGl.context.uniformMatrix4fv(
+            this.shader.getUniformLocation("u_ModelMatrix"),
+            false,
+            node.worldTransform
+        );
+        this.webGl.context.uniformMatrix4fv(
+            this.shader.getUniformLocation("u_ViewMatrix"),
+            false,
+            this.viewMatrix
+        );
+        this.webGl.context.uniformMatrix4fv(
+            this.shader.getUniformLocation("u_ProjectionMatrix"),
+            false,
+            this.projMatrix
+        );
+        this.webGl.context.uniform2i(
+            this.shader.getUniformLocation("u_FramebufferSize"),
+            this.currentWidth,
+            this.currentHeight
+        );
+        // The projection matrix stores the focal length in the first and second element of the diagonal.
+        // We need to convert from NDC space to screen space, which is done by multiplying with the framebuffer dimensions and dividing by 2, since NDC goes from -1 to 1.
+        this.webGl.context.uniform2f(
+            this.shader.getUniformLocation("u_FocalLength"),
+            this.projMatrix[0] * this.currentWidth * 0.5,
+            this.projMatrix[5] * this.currentHeight * 0.5
+        );
+        this.shader.updateUniform("u_TextureWidth", primitive.splatTextureWidth);
+
+        this.webGl.context.enable(GL.BLEND);
+        this.webGl.context.blendFuncSeparate(
+            GL.ONE,
+            GL.ONE_MINUS_SRC_ALPHA,
+            GL.ONE,
+            GL.ONE_MINUS_SRC_ALPHA
+        );
+        this.webGl.context.blendEquation(GL.FUNC_ADD);
+
+        let textureIndex = 0;
+
+        let location = this.shader.getUniformLocation(primitive.positionTextureInfo.samplerName);
+        this.webGl.setTexture(location, state.gltf, primitive.positionTextureInfo, textureIndex++);
+
+        location = this.shader.getUniformLocation(primitive.rotationTextureInfo.samplerName);
+        this.webGl.setTexture(location, state.gltf, primitive.rotationTextureInfo, textureIndex++);
+
+        location = this.shader.getUniformLocation(primitive.scaleTextureInfo.samplerName);
+        this.webGl.setTexture(location, state.gltf, primitive.scaleTextureInfo, textureIndex++);
+
+        location = this.shader.getUniformLocation(primitive.opacityTextureInfo.samplerName);
+        this.webGl.setTexture(location, state.gltf, primitive.opacityTextureInfo, textureIndex++);
+
+        location = this.shader.getUniformLocation(primitive.shArray.samplerName);
+        this.webGl.setTexture(location, state.gltf, primitive.shArray, textureIndex++);
+
+        this.webGl.context.bindBuffer(this.webGl.context.ARRAY_BUFFER, this.splatVBO);
+        location = this.shader.getAttributeLocation("a_position");
+        this.webGl.context.enableVertexAttribArray(location);
+        this.webGl.context.vertexAttribPointer(location, 2, GL.FLOAT, false, 0, 0);
+        this.webGl.context.bindBuffer(this.webGl.context.ARRAY_BUFFER, null);
+
+        this.webGl.context.bindBuffer(this.webGl.context.ARRAY_BUFFER, this.currentSortBuffer);
+        this.webGl.context.bufferData(
+            this.webGl.context.ARRAY_BUFFER,
+            primitive.sortOrder,
+            this.webGl.context.DYNAMIC_DRAW
+        );
+        location = this.shader.getAttributeLocation("a_instance_sort_index");
+        this.webGl.context.enableVertexAttribArray(location);
+        this.webGl.context.vertexAttribIPointer(location, 1, GL.UNSIGNED_INT, 0, 0);
+        this.webGl.context.vertexAttribDivisor(location, 1);
+        this.webGl.context.bindBuffer(this.webGl.context.ARRAY_BUFFER, null);
+
+        this.webGl.context.drawArraysInstanced(GL.TRIANGLE_STRIP, 0, 4, primitive.sortOrder.length);
+
+        this.webGl.context.vertexAttribDivisor(location, 0);
+        this.webGl.context.disableVertexAttribArray(location);
     }
 
     // vertices with given material

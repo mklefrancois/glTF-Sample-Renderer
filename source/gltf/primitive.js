@@ -45,6 +45,7 @@ class gltfPrimitive extends GltfObject {
         this.opacityTextureInfo = undefined;
         this.sphericalHarmonicsTextureInfo = undefined;
         this.sortOrder = undefined;
+        this.splatTextureWidth = undefined;
 
         // The primitive centroid is used for depth sorting.
         this.centroid = undefined;
@@ -130,8 +131,13 @@ class gltfPrimitive extends GltfObject {
             formats.format === GL.RGB_INTEGER ||
             formats.format === GL.RGBA_INTEGER
         ) {
-            this.defines.push(`${attributeName}_IS_INTEGER 1`);
+            if (componentType === GL.UNSIGNED_BYTE || componentType === GL.UNSIGNED_SHORT) {
+                this.defines.push(`${attributeName}_IS_UINTEGER 1`);
+            } else {
+                this.defines.push(`${attributeName}_IS_INTEGER 1`);
+            }
             if (accessor.normalized) {
+                // Only shorts do not support normalized integer formats, so we need to normalize them manually in the shader.
                 this.defines.push(`${attributeName}_NEEDS_NORMALIZATION 1`);
             }
         } else {
@@ -400,7 +406,7 @@ class gltfPrimitive extends GltfObject {
                     `Unsupported kernel type for Gaussian Splatting: ${extension.kernel}. Using ellipse kernel.`
                 );
             }
-            if (extension.colorSpace === "srgb_rec_709_display") {
+            if (extension.colorSpace === "srgb_rec709_display") {
                 this.linear = false;
             } else if (extension.colorSpace !== "lin_rec709_display") {
                 console.warn(
@@ -436,8 +442,8 @@ class gltfPrimitive extends GltfObject {
             const max2DTextureSize = Math.pow(webGlContext.getParameter(GL.MAX_TEXTURE_SIZE), 2);
             const vertexCount =
                 gltf.accessors[this.attributes["KHR_gaussian_splatting:SH_DEGREE_0_COEF_0"]].count;
-            const singleTextureWidth = Math.ceil(Math.sqrt(vertexCount));
-            const singleTextureSize = Math.pow(singleTextureWidth, 2);
+            this.splatTextureWidth = Math.ceil(Math.sqrt(vertexCount));
+            const singleTextureSize = Math.pow(this.splatTextureWidth, 2);
 
             if (vertexCount > max2DTextureSize) {
                 console.error("Vertex count exceeds maximum 2D texture size.");
@@ -455,7 +461,7 @@ class gltfPrimitive extends GltfObject {
             this.rotationTextureInfo = this._createDataTexture(
                 gltf,
                 webGlContext,
-                "KHR_gaussian_splatting_ROTATION",
+                "ROTATION",
                 gltf.accessors[this.attributes["KHR_gaussian_splatting:ROTATION"]]
             );
 
@@ -470,7 +476,7 @@ class gltfPrimitive extends GltfObject {
             this.scaleTextureInfo = this._createDataTexture(
                 gltf,
                 webGlContext,
-                "KHR_gaussian_splatting_SCALE",
+                "SCALE",
                 gltf.accessors[this.attributes["KHR_gaussian_splatting:SCALE"]]
             );
 
@@ -485,7 +491,7 @@ class gltfPrimitive extends GltfObject {
             this.opacityTextureInfo = this._createDataTexture(
                 gltf,
                 webGlContext,
-                "KHR_gaussian_splatting_OPACITY",
+                "OPACITY",
                 gltf.accessors[this.attributes["KHR_gaussian_splatting:OPACITY"]]
             );
 
@@ -527,14 +533,15 @@ class gltfPrimitive extends GltfObject {
                 const data = accessor.getDeinterlacedView(gltf);
                 shData.set(data, i * singleTextureSize * 3);
             }
-            this._createDataTextureArray(
+
+            this.shArray = this._createDataTextureArray(
                 gltf,
                 webGlContext,
                 shData,
-                singleTextureWidth,
+                this.splatTextureWidth,
                 textureAtlasSize,
                 3,
-                "u_SHCoefficients"
+                "u_SHCoefficientsSampler"
             );
 
             this.sortOrder = new Uint32Array(vertexCount);
@@ -640,7 +647,7 @@ class gltfPrimitive extends GltfObject {
                 }
 
                 // Add the morph target texture.
-                this._createDataTextureArray(
+                this.morphTargetTextureInfo = this._createDataTextureArray(
                     gltf,
                     webGlContext,
                     morphTargetTextureArray,
