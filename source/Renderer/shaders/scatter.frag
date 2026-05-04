@@ -104,7 +104,7 @@ void main()
     // Calculate fresnel mix for IBL  
  
     vec3 f_dielectric_fresnel_ibl = getIBLGGXFresnel(n, v, materialInfo.perceptualRoughness, materialInfo.f0_dielectric, materialInfo.specularWeight);
-    frontColor += vec4(mix(f_diffuse, f_specular_dielectric,  f_dielectric_fresnel_ibl), 0.0) * albedoSheenScaling * vec4(materialInfo.multiscatterColor, 1.0);
+    frontColor += vec4(mix(f_diffuse, f_specular_dielectric,  f_dielectric_fresnel_ibl), 0.0) * albedoSheenScaling;
 
 #endif //end USE_IBL
 
@@ -153,7 +153,7 @@ void main()
 #endif
 
         l_dielectric_brdf = mix(l_diffuse, l_specular_dielectric, dielectric_fresnel);
-        color += l_dielectric_brdf * albedoSheenScaling * vec3(materialInfo.multiscatterColor);
+        color += l_dielectric_brdf * albedoSheenScaling;
     }
     
     frontColor += vec4(color.rgb, 0.0);

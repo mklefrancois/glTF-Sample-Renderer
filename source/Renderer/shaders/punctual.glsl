@@ -181,7 +181,7 @@ vec3 burley_radial_pdf(vec3 d, float r)
 }
 
 
-vec3 getSubsurfaceScattering(vec3 position, mat4 projectionMatrix, vec3 attenuationDistance, sampler2D scatterLUT, vec3 diffuseColor, vec3 singleScatterColor) {
+vec3 getSubsurfaceScattering(vec3 position, mat4 projectionMatrix, vec3 attenuationDistance, sampler2D scatterLUT, vec3 diffuseColor, vec3 singleScatterColor, vec3 multiScatterColor) {
     vec3 scatterDistance = attenuationDistance; // Scale the attenuation distance by the multi-scatter color
     float maxColor = max3(scatterDistance);
     vec2 texelSize = 1.0 / vec2(textureSize(u_ScatterDepthFramebufferSampler, 0));
@@ -242,6 +242,6 @@ vec3 getSubsurfaceScattering(vec3 position, mat4 projectionMatrix, vec3 attenuat
         }
     }
     totalWeight = max(totalWeight, vec3(0.0001)); // Avoid division by zero
-    return totalDiffuse / totalWeight * diffuseColor;
+    return totalDiffuse / totalWeight * diffuseColor * multiScatterColor;
 }
 #endif // MATERIAL_VOLUME_SCATTER
