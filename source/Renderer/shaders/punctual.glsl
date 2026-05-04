@@ -161,9 +161,23 @@ vec3 burley_setup(vec3 radius, vec3 albedo) {
 
 vec3 burley_eval(vec3 d, float r)
 {
-  vec3 exp_r_3_d = exp(-r / (3.0 * d));
-  vec3 exp_r_d = exp_r_3_d * exp_r_3_d * exp_r_3_d;
-  return (exp_r_d + exp_r_3_d) / (4.0 * d);
+    r = max(r, 1e-5);
+    vec3 exp_r_3_d = exp(-r / (3.0 * d));
+    vec3 exp_r_d = exp_r_3_d * exp_r_3_d * exp_r_3_d;
+    // Full 2D radial Burley profile: (e^{-r/d} + e^{-r/3d}) / (8*PI*d*r)
+    return (exp_r_d + exp_r_3_d) / max(vec3(1e-10), 8.0 * M_PI * d * r);
+}
+
+// 1D marginal radial PDF for importance sampling: integral of R(r)*2*PI*r over angle
+// = (e^{-r/d} + e^{-r/3d}) / (4*d), normalized by the series truncation constant.
+vec3 burley_radial_pdf(vec3 d, float r)
+{
+    // Limit integral of profile to 16*d, which captures >99.9% of the energy for all albedos.
+    const float normConst = 0.9963790093708328;
+    r = max(r, 1e-5);
+    vec3 exp_r_3_d = exp(-r / (3.0 * d));
+    vec3 exp_r_d = exp_r_3_d * exp_r_3_d * exp_r_3_d;
+    return (exp_r_d + exp_r_3_d) / (4.0 * d * normConst);
 }
 
 
@@ -198,8 +212,10 @@ vec3 getSubsurfaceScattering(vec3 position, mat4 projectionMatrix, vec3 attenuat
     for (int i = 0; i < SCATTER_SAMPLES_COUNT; i++) {
         vec3 scatterSample = u_ScatterSamples[i];
         float fabAngle = scatterSample.x;
+        // scatterSample.y is the normalized radius [0,1] relative to maxColor
         float r = scatterSample.y * maxRadiusPixels * texelSize.x;
-        float rcpPdf = scatterSample.z;
+        // Physical 2D projected distance of this sample in meters (used for MIS PDF)
+        float r_physical_2D = scatterSample.y * maxColor;
         vec2 sampleCoords = vec2(cos(fabAngle) * r, sin(fabAngle) * r);
         vec2 sampleUV = uv + sampleCoords; // + (randomTheta * 2.0 - 1.0) * 0.01;
         vec4 textureSample = textureLod(scatterLUT, sampleUV, 0.0);
@@ -212,9 +228,14 @@ vec3 getSubsurfaceScattering(vec3 position, mat4 projectionMatrix, vec3 attenuat
             vec4 sampleUpos = inverseProjectionMatrix * vec4(sampleClipUV.x, sampleClipUV.y, sampleDepth, 1.0);
             vec3 sampleViewPosition = sampleUpos.xyz / sampleUpos.w; // Normalize the coordinates
 
-            // Distance between center and sample in comparison to maximum radius is used for weighting the scattering contribution
+            // True 3D distance between fragments in view space
             float sampleDistance = distance(sampleViewPosition, fragViewPosition);
-            vec3 weight = burley_eval(d, sampleDistance) * rcpPdf;
+            // MIS weight: evaluate the Burley profile at the true 3D distance,
+            // divided by the 1D radial PDF at the projected 2D distance.
+            // Both use the actual material d, avoiding the bias from the precomputed
+            // white-albedo normalized rcpPdf (scatterSample.z).
+            vec3 sampling_pdf = burley_radial_pdf(d, r_physical_2D);
+            vec3 weight = burley_eval(d, sampleDistance) / max(sampling_pdf, vec3(1e-10));
 
             totalWeight += weight;
             totalDiffuse += weight * textureSample.rgb;
