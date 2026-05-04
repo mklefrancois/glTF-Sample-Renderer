@@ -153,7 +153,7 @@ void main()
 #endif
 
         l_dielectric_brdf = mix(l_diffuse, l_specular_dielectric, dielectric_fresnel);
-        color += l_dielectric_brdf * albedoSheenScaling;
+        color += l_dielectric_brdf * albedoSheenScaling * vec3(materialInfo.multiscatterColor);
     }
     
     frontColor += vec4(color.rgb, 0.0);
