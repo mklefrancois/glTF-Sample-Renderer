@@ -47,6 +47,16 @@ class gltfPrimitive extends GltfObject {
         this.sortOrder = undefined;
         this.splatTextureWidth = undefined;
 
+        // Worker-based sort state
+        this.sortWorker = undefined;
+        this.sortWorkerReady = false;
+        this.sortPending = false;
+
+        // Store the view matrix if sort is currently running
+        this.queuedViewMatrix = undefined;
+        // Compare against a stored value to detect whether a redraw is needed.
+        this.lastSortViewMatrix = undefined;
+
         // The primitive centroid is used for depth sorting.
         this.centroid = undefined;
     }
@@ -442,6 +452,7 @@ class gltfPrimitive extends GltfObject {
             const max2DTextureSize = Math.pow(webGlContext.getParameter(GL.MAX_TEXTURE_SIZE), 2);
             const vertexCount =
                 gltf.accessors[this.attributes["KHR_gaussian_splatting:SH_DEGREE_0_COEF_0"]].count;
+            this.initSortWorker(gltf, vertexCount);
             this.splatTextureWidth = Math.ceil(Math.sqrt(vertexCount));
             const singleTextureSize = Math.pow(this.splatTextureWidth, 2);
 
@@ -662,6 +673,119 @@ class gltfPrimitive extends GltfObject {
         }
 
         this.computeCentroid(gltf);
+    }
+
+    /**
+     * Spawn a mkkellogg WASM sort worker and hand it the splat centre positions.
+     * Called once during initGl for Gaussian Splatting primitives.
+     * @param {object} gltf
+     * @param {number} vertexCount
+     */
+    initSortWorker(gltf, vertexCount) {
+        try {
+            this.sortWorker = new Worker(
+                new URL("./libs/mkkellogg-sort.worker.js", import.meta.url), //URL needs to be relative to rollup build
+                { type: "module" }
+            );
+        } catch (err) {
+            console.warn("Failed to spawn sort worker:", err);
+            return;
+        }
+
+        // Build stride-4 Float32Array (x, y, z, 1) from the POSITION accessor.
+        const posAccessor = gltf.accessors[this.attributes.POSITION];
+        const rawPositions = posAccessor.getDeinterlacedView(gltf);
+        const posOp = new Float32Array(vertexCount * 4);
+        for (let i = 0; i < vertexCount; i++) {
+            posOp[i * 4 + 0] = rawPositions[i * 3 + 0];
+            posOp[i * 4 + 1] = rawPositions[i * 3 + 1];
+            posOp[i * 4 + 2] = rawPositions[i * 3 + 2];
+            posOp[i * 4 + 3] = 1.0;
+        }
+
+        this.sortWorker.onmessage = (e) => {
+            const { type } = e.data;
+            if (type === "ready") {
+                this.sortWorkerReady = true;
+                this.sortPending = false;
+                // Fire any sort that was queued while the worker was initialising.
+                if (this.queuedViewMatrix !== undefined) {
+                    // Skip if the view matrix hasn't changed since the last dispatched sort.
+                    if (this.lastSortViewMatrix !== undefined) {
+                        let same = true;
+                        for (let i = 0; i < 16; i++) {
+                            if (this.lastSortViewMatrix[i] !== this.queuedViewMatrix[i]) {
+                                same = false;
+                                break;
+                            }
+                        }
+                        if (same) return;
+                    }
+                    this.sortPending = true;
+                    this.sortWorker.postMessage({
+                        type: "sort",
+                        viewMatrix: this.queuedViewMatrix
+                    });
+                    this.queuedViewMatrix = undefined;
+                }
+            } else if (type === "sorted") {
+                this.sortOrder = e.data.indices;
+                this.sortPending = false;
+            } else if (type === "error") {
+                console.error("Sort worker error:", e.data.message);
+                this.sortPending = false;
+            }
+        };
+
+        this.sortWorker.onerror = (err) => {
+            console.error(
+                "Sort worker uncaught error:",
+                err.message,
+                err.filename,
+                "line",
+                err.lineno,
+                err
+            );
+            this.sortPending = false;
+        };
+
+        // Transfer positions buffer to the worker (zero-copy).
+        this.sortWorker.postMessage({ type: "init", posOp: posOp, splatCount: vertexCount }, [
+            posOp.buffer
+        ]);
+        this.sortPending = true;
+    }
+
+    /**
+     * Request an asynchronous back-to-front sort of the splat indices.
+     * Safe to call every frame — the request is dropped while a previous sort
+     * is still in flight.
+     * @param {Float32Array} viewMatrix  Column-major 4×4 view matrix.
+     */
+    requestSort(viewMatrix) {
+        if (this.sortWorker === undefined) {
+            return;
+        }
+        if (!this.sortWorkerReady || this.sortPending) {
+            // Worker is busy — keep the latest matrix so it sorts immediately once ready
+            this.queuedViewMatrix = new Float32Array(viewMatrix);
+            return;
+        }
+        // Skip if the view matrix hasn't changed since the last dispatched sort.
+        if (this.lastSortViewMatrix !== undefined) {
+            let same = true;
+            for (let i = 0; i < 16; i++) {
+                if (this.lastSortViewMatrix[i] !== viewMatrix[i]) {
+                    same = false;
+                    break;
+                }
+            }
+            if (same) return;
+        }
+        const vm = new Float32Array(viewMatrix);
+        this.lastSortViewMatrix = vm;
+        this.sortPending = true;
+        this.sortWorker.postMessage({ type: "sort", viewMatrix: vm });
     }
 
     computeCentroid(gltf) {

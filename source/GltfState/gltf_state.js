@@ -31,6 +31,9 @@ class GltfState {
         /** KHR_materials_variants */
         this.variant = undefined;
 
+        /** Indicates whether the view needs to be redrawn, currently used to indicate new sorting orders for gaussian splatting */
+        this.needsRedraw = false;
+
         /** parameters used to configure the rendering */
         this.renderingParameters = {
             /** morphing between vertices */

@@ -669,6 +669,7 @@ class gltfRenderer {
             state.gltf,
             this.transparentDrawables
         );
+        this.needsRedraw = false;
         for (const drawable of this.transparentDrawables.filter((a) => a.depth <= 0)) {
             if (
                 drawable.primitive.extensions?.KHR_gaussian_splatting !== undefined &&
@@ -694,10 +695,17 @@ class gltfRenderer {
                 );
             }
         }
+        state.needsRedraw = this.needsRedraw;
     }
 
     drawSplat(state, primitive, node, projectionMatrix, viewMatrix) {
         if (primitive.skip) return;
+        // Request an async worker sort each frame (no-op if the previous sort
+        // has not yet finished or no worker is available).
+        primitive.requestSort(viewMatrix);
+        if (primitive.sortPending) {
+            this.needsRedraw = true;
+        }
         let vertDefines = primitive.defines.slice();
         if (primitive.linear === true) {
             vertDefines.push("LINEAR_OUTPUT 1");
@@ -723,12 +731,12 @@ class gltfRenderer {
         this.webGl.context.uniformMatrix4fv(
             this.shader.getUniformLocation("u_ViewMatrix"),
             false,
-            this.viewMatrix
+            viewMatrix
         );
         this.webGl.context.uniformMatrix4fv(
             this.shader.getUniformLocation("u_ProjectionMatrix"),
             false,
-            this.projMatrix
+            projectionMatrix
         );
         this.webGl.context.uniform2i(
             this.shader.getUniformLocation("u_FramebufferSize"),
