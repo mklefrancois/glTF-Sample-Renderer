@@ -16,6 +16,7 @@ uniform mat4 u_ModelMatrix;
 uniform uint u_TextureWidth;
 uniform ivec2 u_FramebufferSize;
 uniform vec2 u_FocalLength;
+uniform vec3 u_Camera;
 
 #ifdef POSITION_IS_INTEGER
 uniform isampler2D u_POSITIONSampler;
@@ -44,6 +45,35 @@ uniform sampler2D u_OPACITYSampler;
 #endif
 
 uniform highp sampler2DArray u_SHCoefficientsSampler;
+
+#define SH_C0 0.28209479177387814
+
+#ifdef HAS_GAUSSIAN_SPLATTING_DEGREE_1
+#define SH_C1_0 -0.4886025119029199
+#define SH_C1_1 0.4886025119029199
+#define SH_C1_2 -0.4886025119029199
+
+
+#ifdef HAS_GAUSSIAN_SPLATTING_DEGREE_2
+#define SH_C2_0 1.0925484305920792
+#define SH_C2_1 -1.0925484305920792
+#define SH_C2_2 0.31539156525252005
+#define SH_C2_3 -1.0925484305920792
+#define SH_C2_4 0.5462742152960396
+
+
+#ifdef HAS_GAUSSIAN_SPLATTING_DEGREE_3
+#define SH_C3_0 -0.5900435899266435
+#define SH_C3_1 2.890611442640554
+#define SH_C3_2 -0.4570457994644658
+#define SH_C3_3 0.3731763325901154
+#define SH_C3_4 -0.4570457994644658
+#define SH_C3_5 1.445305721320277
+#define SH_C3_6 -0.5900435899266435
+#endif
+
+#endif
+#endif
 
 mat3 computeC(vec3 scale, vec4 rotation)
 {
@@ -154,6 +184,40 @@ void main()
     opacity = texelFetch(u_OPACITYSampler, texelCoord, 0).x;
 #endif
 
+    // Fetch SH coefficients early to avoid GPU stall
+    // Degree 0
+    vec3 sh0 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 0), 0).rgb;
+
+#ifdef HAS_GAUSSIAN_SPLATTING_DEGREE_1
+    // Degree 1
+    vec3 sh1_0 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 1), 0).rgb;
+    vec3 sh1_1 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 2), 0).rgb;
+    vec3 sh1_2 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 3), 0).rgb;
+
+
+#ifdef HAS_GAUSSIAN_SPLATTING_DEGREE_2
+    // Degree 2
+    vec3 sh2_0 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 4), 0).rgb;
+    vec3 sh2_1 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 5), 0).rgb;
+    vec3 sh2_2 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 6), 0).rgb;
+    vec3 sh2_3 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 7), 0).rgb;
+    vec3 sh2_4 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 8), 0).rgb;
+
+
+#ifdef HAS_GAUSSIAN_SPLATTING_DEGREE_3
+    // Degree 3
+    vec3 sh3_0 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 9), 0).rgb;
+    vec3 sh3_1 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 10), 0).rgb;
+    vec3 sh3_2 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 11), 0).rgb;
+    vec3 sh3_3 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 12), 0).rgb;
+    vec3 sh3_4 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 13), 0).rgb;
+    vec3 sh3_5 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 14), 0).rgb;
+    vec3 sh3_6 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 15), 0).rgb;
+#endif
+
+#endif
+#endif
+
     splat_center = (u_ModelMatrix * vec4(splat_center, 1.0)).xyz;
 
     vec4 view_splat_center = u_ViewMatrix * vec4(splat_center, 1.0);
@@ -187,5 +251,48 @@ void main()
     v_uv = a_position * quad_pixel_size;
     gl_Position = clip_splat_center;
 
-    v_color = vec4(calculateSphericalHarmonics(texelCoord), opacity);
+    vec3 color = sh0 * SH_C0;
+
+#ifdef HAS_GAUSSIAN_SPLATTING_DEGREE_1
+
+    vec3 view_dir = normalize(splat_center - u_Camera);
+    float x = view_dir.x;
+    float y = view_dir.y;
+    float z = view_dir.z;
+
+    color +=    SH_C1_0 * y * sh1_0 + 
+                SH_C1_1 * z * sh1_1 +
+                SH_C1_2 * x * sh1_2;
+
+#ifdef HAS_GAUSSIAN_SPLATTING_DEGREE_2
+    float xx = x * x;
+    float yy = y * y;
+    float zz = z * z;
+    float xy = x * y;
+    float yz = y * z;
+    float xz = x * z;
+
+    color +=    SH_C2_0 * xy * sh2_0 +
+                SH_C2_1 * yz * sh2_1 +
+                SH_C2_2 * (2.0 * zz - xx - yy) * sh2_2 +
+                SH_C2_3 * xz * sh2_3 + 
+                SH_C2_4 * (xx - yy) * sh2_4;
+
+
+#ifdef HAS_GAUSSIAN_SPLATTING_DEGREE_3
+    color +=    SH_C3_0 * y * (3.0 * xx - yy) * sh3_0 +
+                SH_C3_1 * xy * z * sh3_1 +
+                SH_C3_2 * y * (4.0 * zz - xx - yy) * sh3_2 +
+                SH_C3_3 * z * (2.0 * zz - 3.0 * xx - 3.0 * yy) * sh3_3 +
+                SH_C3_4 * x * (4.0 * zz - xx - yy) * sh3_4 +
+                SH_C3_5 * z * (xx - yy) * sh3_5 +
+                SH_C3_6 * x * (xx - 3.0 * yy) * sh3_6;
+#endif
+
+#endif
+#endif
+
+    color += 0.5;
+
+    v_color = vec4(color, opacity);
 }

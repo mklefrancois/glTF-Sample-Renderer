@@ -751,6 +751,7 @@ class gltfRenderer {
             this.projMatrix[5] * this.currentHeight * 0.5
         );
         this.shader.updateUniform("u_TextureWidth", primitive.splatTextureWidth);
+        this.shader.updateUniform("u_Camera", this.currentCameraPosition);
 
         this.webGl.context.enable(GL.BLEND);
         this.webGl.context.blendFuncSeparate(
