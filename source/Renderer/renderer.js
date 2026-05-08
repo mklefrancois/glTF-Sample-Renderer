@@ -711,6 +711,34 @@ class gltfRenderer {
             vertDefines.push("LINEAR_OUTPUT 1");
         }
 
+        // Debug views
+        if (state.renderingParameters.debugOutput !== GltfState.DebugOutput.NONE) {
+            if (
+                state.renderingParameters.debugOutput ===
+                GltfState.DebugOutput.gaussianSplatting.SH_DEGREE_0
+            ) {
+                vertDefines = vertDefines.filter(
+                    (define) => !define.startsWith("HAS_GAUSSIAN_SPLATTING_DEGREE")
+                );
+            } else if (
+                state.renderingParameters.debugOutput ===
+                GltfState.DebugOutput.gaussianSplatting.SH_DEGREE_1
+            ) {
+                vertDefines = vertDefines.filter(
+                    (define) =>
+                        define !== "HAS_GAUSSIAN_SPLATTING_DEGREE_2 1" &&
+                        define !== "HAS_GAUSSIAN_SPLATTING_DEGREE_3 1"
+                );
+            } else if (
+                state.renderingParameters.debugOutput ===
+                GltfState.DebugOutput.gaussianSplatting.SH_DEGREE_2
+            ) {
+                vertDefines = vertDefines.filter(
+                    (define) => define !== "HAS_GAUSSIAN_SPLATTING_DEGREE_3 1"
+                );
+            }
+        }
+
         const fragmentHash = this.shaderCache.selectShader("splat.frag", vertDefines);
         const vertexHash = this.shaderCache.selectShader("splat.vert", vertDefines);
         if (fragmentHash && vertexHash) {

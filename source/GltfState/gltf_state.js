@@ -233,6 +233,17 @@ GltfState.DebugOutput = {
         SINGLE_SCATTER_COLOR: "Single-Scatter Color",
         /** output for the pre scatter pass, which collects all lighting contribution for scattering */
         PRE_SCATTER_PASS: "Pre-Scatter Pass"
+    },
+
+    gaussianSplatting: {
+        /** output the spherical harmonics degree 0 */
+        SH_DEGREE_0: "SH Degree 0",
+        /** output the spherical harmonics degree 0-1 */
+        SH_DEGREE_1: "SH Degree 1",
+        /** output the spherical harmonics degree 0-2 */
+        SH_DEGREE_2: "SH Degree 2",
+        /** output the spherical harmonics degree 0-3 */
+        SH_DEGREE_3: "SH Degree 3"
     }
 };
 
