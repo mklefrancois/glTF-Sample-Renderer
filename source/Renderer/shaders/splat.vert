@@ -121,22 +121,6 @@ vec3 computeCameraCovariance(mat3 world_covariance, vec3 view_splat_center)
     return vec3(cov[0][0], cov[0][1], cov[1][1]);
 }
 
-vec3 calculateSphericalHarmonics(ivec2 texelCoord)
-{
-    ivec3 coord = ivec3(texelCoord.x, texelCoord.y, 0);
-    // Degree 0
-    vec3 sh0 = texelFetch(u_SHCoefficientsSampler, coord, 0).rgb;
-
-    vec3 result = sh0 * 0.2820947917738781;
-
-    //TODO
-
-    result += 0.5;
-    return result;
-
-}
-
-
 void main()
 {
     vec3 splat_center;
@@ -277,7 +261,6 @@ void main()
                 SH_C2_2 * (2.0 * zz - xx - yy) * sh2_2 +
                 SH_C2_3 * xz * sh2_3 + 
                 SH_C2_4 * (xx - yy) * sh2_4;
-
 
 #ifdef HAS_GAUSSIAN_SPLATTING_DEGREE_3
     color +=    SH_C3_0 * y * (3.0 * xx - yy) * sh3_0 +
