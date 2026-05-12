@@ -1016,7 +1016,8 @@ class NvidiaPhysicsInterface extends PhysicsInterface {
                 jointNode.extensions.KHR_physics_rigid_bodies.joint.joint
             ];
 
-        const connectedNode = state.gltf.nodes[gltfJoint.connectedNode];
+        const connectedNode =
+            state.gltf.nodes[jointNode.extensions.KHR_physics_rigid_bodies.joint.connectedNode];
 
         const simplifiedJoints = gltfJoint.simplifiedPhysicsJoints;
         if (simplifiedJoints.length !== pxJoints.length) {
