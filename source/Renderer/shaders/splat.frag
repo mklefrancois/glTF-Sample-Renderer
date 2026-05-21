@@ -4,7 +4,8 @@ in vec4 v_color;  // (r, g, b, opacity)
 in vec2 v_uv;     // pixel-space offset from splat centre
 in vec3 v_conic;  // (A, B, C) coefficients of the conic section defining the splat's shape
 
-out vec4 g_finalColor;
+layout(location = 0) out vec4 g_finalColor;
+layout(location = 1) out uint toneMapFlag;
 
 void main() {
 
@@ -20,4 +21,11 @@ void main() {
         discard;
     }
     g_finalColor = vec4(v_color.rgb * alpha, alpha); // premultiplied-alpha output
+#ifdef LINEAR_OUTPUT
+    // Convert linear to sRGB?
+    toneMapFlag = 1u;
+#else
+    // Color is already in sRGB
+    toneMapFlag = 0u;
+#endif
 }

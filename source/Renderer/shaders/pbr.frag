@@ -30,7 +30,8 @@ precision highp float;
 #endif
 
 
-out vec4 g_finalColor;
+layout(location = 0) out vec4 g_finalColor;
+layout(location = 1) out uint toneMapFlag;
 
 
 void main()
@@ -386,6 +387,7 @@ void main()
 
 #ifdef LINEAR_OUTPUT
     g_finalColor = vec4(color.rgb, baseColor.a);
+    toneMapFlag = 2u;
 #else
     g_finalColor = vec4(toneMap(color), baseColor.a);
 #endif

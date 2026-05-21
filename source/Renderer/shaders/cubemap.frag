@@ -9,7 +9,8 @@ uniform float u_EnvBlurNormalized;
 uniform int u_MipCount;
 uniform samplerCube u_GGXEnvSampler;
 
-out vec4 FragColor;
+layout(location = 0) out vec4 FragColor;
+layout(location = 1) out uint toneMapFlag;
 in vec3 v_TexCoords;
 
 
@@ -18,10 +19,6 @@ void main()
     vec4 color = textureLod(u_GGXEnvSampler, v_TexCoords, u_EnvBlurNormalized * float(u_MipCount - 1));
     color.rgb *= u_EnvIntensity;
     color.a = 1.0;
-
-#ifdef LINEAR_OUTPUT
     FragColor = color.rgba;
-#else
-    FragColor = vec4(toneMap(color.rgb), color.a);
-#endif
+    toneMapFlag = 2u;
 }
