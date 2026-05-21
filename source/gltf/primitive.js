@@ -1327,7 +1327,7 @@ class gltfPrimitive extends GltfObject {
         if (this.indices === undefined) {
             return;
         }
-        const indices = gltf.accessors[this.indices].getTypedView(gltf);
+        const indices = gltf.accessors[this.indices].getDeinterlacedView(gltf);
 
         // Unweld attributes:
         for (const [attribute, accessorIndex] of Object.entries(this.attributes)) {
@@ -1415,9 +1415,21 @@ class gltfPrimitive extends GltfObject {
             return;
         }
 
-        const positions = gltf.accessors[this.attributes.POSITION].getTypedView(gltf);
-        const normals = gltf.accessors[this.attributes.NORMAL].getTypedView(gltf);
-        const texcoords = gltf.accessors[this.attributes.TEXCOORD_0].getTypedView(gltf);
+        let positions =
+            gltf.accessors[this.attributes.POSITION].getNormalizedDeinterlacedView(gltf);
+        let normals = gltf.accessors[this.attributes.NORMAL].getNormalizedDeinterlacedView(gltf);
+        let texcoords =
+            gltf.accessors[this.attributes.TEXCOORD_0].getNormalizedDeinterlacedView(gltf);
+
+        if (positions.constructor !== Float32Array) {
+            positions = Float32Array.from(positions);
+        }
+        if (normals.constructor !== Float32Array) {
+            normals = Float32Array.from(normals);
+        }
+        if (texcoords.constructor !== Float32Array) {
+            texcoords = Float32Array.from(texcoords);
+        }
 
         const tangents = generateTangents(positions, normals, texcoords);
 

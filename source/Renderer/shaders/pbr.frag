@@ -41,6 +41,22 @@ void main()
 #if ALPHAMODE == ALPHAMODE_OPAQUE
     baseColor.a = 1.0;
 #endif
+#ifdef MATERIAL_UNLIT
+#if ALPHAMODE == ALPHAMODE_MASK
+    if (baseColor.a < u_AlphaCutoff)
+    {
+        discard;
+    }
+    baseColor.a = 1.0;
+#endif
+#ifdef LINEAR_OUTPUT
+// If used for transmission, we need to invert exposure and tone mapping, so the original color is computed in the general render pass
+    g_finalColor = vec4(toneMapInverse(baseColor.rgb), baseColor.a);
+#else
+    g_finalColor = vec4(linearTosRGB(baseColor.rgb), baseColor.a);
+#endif
+// PBR Flow. This else goes all the way to the end of the file
+#else
     vec3 color = vec3(0);
 
     vec3 v = normalize(u_Camera - v_Position);
@@ -364,10 +380,7 @@ void main()
     f_emissive *= texture(u_EmissiveSampler, getEmissiveUV()).rgb;
 #endif
 
-
-#ifdef MATERIAL_UNLIT
-    color = baseColor.rgb;
-#elif defined(NOT_TRIANGLE) && !defined(HAS_NORMAL_VEC3)
+#if defined(NOT_TRIANGLE) && !defined(HAS_NORMAL_VEC3)
     //Points or Lines with no NORMAL attribute SHOULD be rendered without lighting and instead use the sum of the base color value and the emissive value.
     color = f_emissive + baseColor.rgb;
 #else
@@ -550,5 +563,6 @@ vec3 specularTexture = vec3(1.0);
 #endif
 #endif
 
+#endif
 #endif
 }
