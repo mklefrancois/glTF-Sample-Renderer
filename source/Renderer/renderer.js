@@ -685,7 +685,7 @@ class gltfRenderer {
                 this.viewProjectionMatrix,
                 state,
                 this.shaderCache,
-                ["LINEAR_OUTPUT 1"]
+                ["TRANSMISSION_PASS 1"]
             );
 
             let drawableCounter = 0;
@@ -693,6 +693,7 @@ class gltfRenderer {
                 const drawable = instance[0];
                 let renderpassConfiguration = {};
                 renderpassConfiguration.linearOutput = true;
+                renderpassConfiguration.transmission = true;
                 renderpassConfiguration.frameBufferSize = [
                     this.opaqueFramebufferWidth,
                     this.opaqueFramebufferHeight
@@ -723,6 +724,7 @@ class gltfRenderer {
             for (const drawable of this.transparentDrawables) {
                 let renderpassConfiguration = {};
                 renderpassConfiguration.linearOutput = true;
+                renderpassConfiguration.transmission = true;
                 renderpassConfiguration.frameBufferSize = [
                     this.opaqueFramebufferWidth,
                     this.opaqueFramebufferHeight
@@ -971,6 +973,7 @@ class gltfRenderer {
             GL.ONE_MINUS_SRC_ALPHA
         );
         this.webGl.context.blendEquation(GL.FUNC_ADD);
+        this.webGl.context.depthMask(false);
 
         let textureIndex = 0;
 
@@ -1011,6 +1014,7 @@ class gltfRenderer {
 
         this.webGl.context.vertexAttribDivisor(location, 0);
         this.webGl.context.disableVertexAttribArray(location);
+        this.webGl.context.depthMask(true);
     }
 
     tonemapPass(state, aspectOffsetX, aspectOffsetY, aspectWidth, aspectHeight) {
@@ -1112,6 +1116,10 @@ class gltfRenderer {
         {
             fragDefines.push("LINEAR_OUTPUT 1");
         }
+        if (renderpassConfiguration.transmission)
+        {
+            fragDefines.push("TRANSMISSION_PASS 1");
+        }
 
         // POINTS, LINES, LINE_LOOP, LINE_STRIP
         if (primitive.mode < 4) {
@@ -1188,10 +1196,12 @@ class gltfRenderer {
             this.webGl.context.enable(GL.BLEND);
             this.webGl.context.blendFuncSeparate(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA, GL.ONE, GL.ONE_MINUS_SRC_ALPHA);
             this.webGl.context.blendEquation(GL.FUNC_ADD);
+            this.webGl.context.depthMask(false);
         }
         else
         {
             this.webGl.context.disable(GL.BLEND);
+            this.webGl.context.depthMask(true);
         }
         
 

@@ -49,11 +49,13 @@ void main()
     }
     baseColor.a = 1.0;
 #endif
-#ifdef LINEAR_OUTPUT
+#ifdef TRANSMISSION_PASS
 // If used for transmission, we need to invert exposure and tone mapping, so the original color is computed in the general render pass
     g_finalColor = vec4(toneMapInverse(baseColor.rgb), baseColor.a);
+    toneMapFlag = 2u;
 #else
-    g_finalColor = vec4(linearTosRGB(baseColor.rgb), baseColor.a);
+    g_finalColor = baseColor;
+    toneMapFlag = 1u;
 #endif
 // PBR Flow. This else goes all the way to the end of the file
 #else
