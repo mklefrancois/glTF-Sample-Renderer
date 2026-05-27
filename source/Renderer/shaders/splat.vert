@@ -232,6 +232,15 @@ void main()
     vec2 quad_pixel_size = vec2(3.4 * sqrt(a), 3.4 * sqrt(c));  // screen space half quad height and width
     vec2 quad_ndc_size = quad_pixel_size / vec2(u_FramebufferSize) * 2.0;  // in ndc space
     clip_splat_center.xy = clip_splat_center.xy + a_position * quad_ndc_size;
+
+    // Discard too large splats that would cover the entire screen
+    float min_screen = float(min(u_FramebufferSize.x, u_FramebufferSize.y));
+    float max_quad_size = max(quad_pixel_size.x, quad_pixel_size.y);
+    if (max_quad_size > min_screen)
+    {
+        gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
+        return;
+    }
     v_uv = a_position * quad_pixel_size;
     gl_Position = clip_splat_center;
 
