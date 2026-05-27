@@ -23,6 +23,7 @@ import splatVertexShader from "./shaders/splat.vert";
 import splatFragmentShader from "./shaders/splat.frag";
 import fullscreenVertShader from "./shaders/fullscreen.vert";
 import tonemapMainFragShader from "./shaders/tonemap_main.frag";
+import splatCompositeFragShader from "./shaders/splat_composite.frag";
 import { gltfLight } from "../gltf/light.js";
 import { jsToGl } from "../gltf/utils.js";
 import { gltfMaterial } from "../gltf/material.js";
@@ -69,6 +70,7 @@ class gltfRenderer {
         shaderSources.set("splat.frag", splatFragmentShader);
         shaderSources.set("fullscreen.vert", fullscreenVertShader);
         shaderSources.set("tonemap_main.frag", tonemapMainFragShader);
+        shaderSources.set("splat_composite.frag", splatCompositeFragShader);
 
         this.shaderCache = new ShaderCache(shaderSources, this.webGl);
 
@@ -110,6 +112,12 @@ class gltfRenderer {
         // Tracks last value of state.renderingParameters.floatingPointFramebuffer so we
         // only re-attach when the setting actually changes.
         this._floatingPointFramebuffer = undefined;
+
+        // Splat isolation framebuffer: same colour format as mainFramebuffer,
+        // shares mainDepthTexture for depth-test (no depth writes).
+        this.splatColorTexture = undefined;
+        this.splatColorTextureHDR = undefined;
+        this.splatFramebuffer = undefined;
     }
 
     /////////////////////////////////////////////////////////////////////
@@ -279,6 +287,39 @@ class gltfRenderer {
             context.drawBuffers([context.COLOR_ATTACHMENT0, context.COLOR_ATTACHMENT1]);
             context.bindFramebuffer(context.FRAMEBUFFER, null);
 
+            this.splatColorTexture = context.createTexture();
+            context.bindTexture(context.TEXTURE_2D, this.splatColorTexture);
+            context.texParameteri(context.TEXTURE_2D, context.TEXTURE_MIN_FILTER, context.NEAREST);
+            context.texParameteri(context.TEXTURE_2D, context.TEXTURE_MAG_FILTER, context.NEAREST);
+            context.texParameteri(context.TEXTURE_2D, context.TEXTURE_WRAP_S, context.CLAMP_TO_EDGE);
+            context.texParameteri(context.TEXTURE_2D, context.TEXTURE_WRAP_T, context.CLAMP_TO_EDGE);
+            context.texImage2D(context.TEXTURE_2D, 0, context.RGBA,
+                hdrW, hdrH, 0, context.RGBA, context.UNSIGNED_BYTE, null);
+            context.bindTexture(context.TEXTURE_2D, null);
+
+            if (context.supports_EXT_color_buffer_half_float) {
+                this.splatColorTextureHDR = context.createTexture();
+                context.bindTexture(context.TEXTURE_2D, this.splatColorTextureHDR);
+                context.texParameteri(context.TEXTURE_2D, context.TEXTURE_MIN_FILTER, context.NEAREST);
+                context.texParameteri(context.TEXTURE_2D, context.TEXTURE_MAG_FILTER, context.NEAREST);
+                context.texParameteri(context.TEXTURE_2D, context.TEXTURE_WRAP_S, context.CLAMP_TO_EDGE);
+                context.texParameteri(context.TEXTURE_2D, context.TEXTURE_WRAP_T, context.CLAMP_TO_EDGE);
+                context.texImage2D(context.TEXTURE_2D, 0, context.RGBA16F,
+                    hdrW, hdrH, 0, context.RGBA, context.HALF_FLOAT, null);
+                context.bindTexture(context.TEXTURE_2D, null);
+            }
+
+            // Initially attach the LDR colour texture; re-attached together with
+            // mainFramebuffer when _floatingPointFramebuffer is resolved.
+            this.splatFramebuffer = context.createFramebuffer();
+            context.bindFramebuffer(context.FRAMEBUFFER, this.splatFramebuffer);
+            context.framebufferTexture2D(context.FRAMEBUFFER, context.COLOR_ATTACHMENT0,
+                context.TEXTURE_2D, this.splatColorTexture, 0);
+            context.framebufferTexture2D(context.FRAMEBUFFER, context.DEPTH_ATTACHMENT,
+                context.TEXTURE_2D, this.mainDepthTexture, 0);
+            context.drawBuffers([context.COLOR_ATTACHMENT0]);
+            context.bindFramebuffer(context.FRAMEBUFFER, null);
+
             this.maxVertAttributes = context.getParameter(context.MAX_VERTEX_ATTRIBS);
 
             this.initialized = true;
@@ -416,20 +457,57 @@ class gltfRenderer {
                     null
                 );
                 this.webGl.context.bindTexture(this.webGl.context.TEXTURE_2D, null);
+
+                // Resize splat isolation colour textures.
+                this.webGl.context.bindTexture(
+                    this.webGl.context.TEXTURE_2D,
+                    this.splatColorTexture
+                );
+                this.webGl.context.texImage2D(
+                    this.webGl.context.TEXTURE_2D,
+                    0,
+                    this.webGl.context.RGBA,
+                    this.currentWidth,
+                    this.currentHeight,
+                    0,
+                    this.webGl.context.RGBA,
+                    this.webGl.context.UNSIGNED_BYTE,
+                    null
+                );
+                if (this.splatColorTextureHDR) {
+                    this.webGl.context.bindTexture(
+                        this.webGl.context.TEXTURE_2D,
+                        this.splatColorTextureHDR
+                    );
+                    this.webGl.context.texImage2D(
+                        this.webGl.context.TEXTURE_2D,
+                        0,
+                        this.webGl.context.RGBA16F,
+                        this.currentWidth,
+                        this.currentHeight,
+                        0,
+                        this.webGl.context.RGBA,
+                        this.webGl.context.HALF_FLOAT,
+                        null
+                    );
+                }
+                this.webGl.context.bindTexture(this.webGl.context.TEXTURE_2D, null);
             }
         }
     }
 
     // frame state
     clearFrame(clearColor) {
+        // Convert clear color from sRGB to linear since we will always transfer to sRGB by default
+        const linearClearColor = clearColor.map((c) => Math.pow(c, 2.2));
         this.webGl.context.bindFramebuffer(this.webGl.context.FRAMEBUFFER, this.opaqueFramebuffer);
-        this.webGl.context.clearColor(...clearColor);
+        this.webGl.context.clearColor(...linearClearColor);
         this.webGl.context.clear(GL.COLOR_BUFFER_BIT | GL.DEPTH_BUFFER_BIT);
         this.webGl.context.bindFramebuffer(
             this.webGl.context.FRAMEBUFFER,
             this.opaqueFramebufferMSAA
         );
-        this.webGl.context.clearColor(...clearColor);
+        this.webGl.context.clearColor(...linearClearColor);
         this.webGl.context.clear(GL.COLOR_BUFFER_BIT | GL.DEPTH_BUFFER_BIT);
         this.webGl.context.bindFramebuffer(this.webGl.context.FRAMEBUFFER, this.scatterFramebuffer);
         this.webGl.context.clearColor(0, 0, 0, 0);
@@ -440,14 +518,14 @@ class gltfRenderer {
             const gl = this.webGl.context;
             gl.bindFramebuffer(gl.FRAMEBUFFER, this.mainFramebuffer);
             // Clear color attachment 0 to the scene background colour.
-            gl.clearBufferfv(gl.COLOR, 0, clearColor);
-            // Clear tonemap flag attachment to 0 (linear only = no-op pass-through).
-            gl.clearBufferuiv(gl.COLOR, 1, new Uint32Array([0, 0, 0, 0]));
+            gl.clearBufferfv(gl.COLOR, 0, linearClearColor);
+            // Clear tonemap flag attachment to 1 (linear to sRGB by default).
+            gl.clearBufferuiv(gl.COLOR, 1, new Uint32Array([1, 1, 1, 1]));
             // Clear depth.
             gl.clearBufferfv(gl.DEPTH, 0, new Float32Array([1.0]));
         }
         this.webGl.context.bindFramebuffer(this.webGl.context.FRAMEBUFFER, null);
-        this.webGl.context.clearColor(...clearColor);
+        this.webGl.context.clearColor(...linearClearColor);
         this.webGl.context.clear(GL.COLOR_BUFFER_BIT | GL.DEPTH_BUFFER_BIT);
         this.webGl.context.bindFramebuffer(this.webGl.context.FRAMEBUFFER, null);
     }
@@ -766,21 +844,34 @@ class gltfRenderer {
             this.webGl.context.generateMipmap(this.webGl.context.TEXTURE_2D);
         }
 
-        // Re-attach mainFramebuffer COLOR_ATTACHMENT0 if the floating-point toggle changed.
+        // Re-attach mainFramebuffer and splatFramebuffer COLOR_ATTACHMENT0 if
+        // the floating-point toggle changed.
         const wantFP =
             state.renderingParameters.floatingPointFramebuffer !== false &&
             this.mainTextureHDR !== undefined;
         if (wantFP !== this._floatingPointFramebuffer) {
             this._floatingPointFramebuffer = wantFP;
             const gl = this.webGl.context;
+            const colorTex = wantFP ? this.mainTextureHDR : this.mainTexture;
+            const splatColorTex = wantFP ? this.splatColorTextureHDR : this.splatColorTexture;
             gl.bindFramebuffer(gl.FRAMEBUFFER, this.mainFramebuffer);
             gl.framebufferTexture2D(
                 gl.FRAMEBUFFER,
                 gl.COLOR_ATTACHMENT0,
                 gl.TEXTURE_2D,
-                wantFP ? this.mainTextureHDR : this.mainTexture,
+                colorTex,
                 0
             );
+            if (this.splatFramebuffer) {
+                gl.bindFramebuffer(gl.FRAMEBUFFER, this.splatFramebuffer);
+                gl.framebufferTexture2D(
+                    gl.FRAMEBUFFER,
+                    gl.COLOR_ATTACHMENT0,
+                    gl.TEXTURE_2D,
+                    splatColorTex ?? this.splatColorTexture,
+                    0
+                );
+            }
             gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         }
 
@@ -850,18 +941,41 @@ class gltfRenderer {
             this.transparentDrawables
         );
         this.needsRedraw = false;
+
+        // ── Transparent drawables (non-splat and splat) in depth-sorted order ───
+        // Splats are rendered one at a time into the dedicated splatFramebuffer
+        // (which shares mainDepthTexture for depth-testing) and
+        // immediately composited back into mainFramebuffer before the next
+        // drawable is processed.  This preserves correct depth-sorted blending
+        // order between splats and regular transparent geometry.
         for (const drawable of this.transparentDrawables.filter((a) => a.depth <= 0)) {
             if (
                 drawable.primitive.extensions?.KHR_gaussian_splatting !== undefined &&
                 state.renderingParameters.enabledExtensions.KHR_gaussian_splatting
             ) {
-                this.drawSplat(
-                    state,
-                    drawable.primitive,
-                    drawable.node,
-                    this.projMatrix,
-                    this.viewMatrix
-                );
+                // Isolate this splat in its own framebuffer pass.
+                if (this.splatFramebuffer) {
+                    const gl = this.webGl.context;
+
+                    // Clear only the colour attachment – depth is shared with
+                    // mainFramebuffer and must not be touched here.
+                    gl.bindFramebuffer(gl.FRAMEBUFFER, this.splatFramebuffer);
+                    gl.clearBufferfv(gl.COLOR, 0, [0, 0, 0, 0]);
+                    gl.viewport(aspectOffsetX, aspectOffsetY, aspectWidth, aspectHeight);
+
+                    this.drawSplat(
+                        state,
+                        drawable.primitive,
+                        drawable.node,
+                        this.projMatrix,
+                        this.viewMatrix
+                    );
+
+                    // Composite into mainFramebuffer.
+                    gl.bindFramebuffer(gl.FRAMEBUFFER, this.mainFramebuffer);
+                    gl.viewport(aspectOffsetX, aspectOffsetY, aspectWidth, aspectHeight);
+                    this.splatCompositePass(state, !drawable.primitive.linear);
+                }
             } else {
                 let renderpassConfiguration = {};
                 renderpassConfiguration.linearOutput = true;
@@ -1059,6 +1173,61 @@ class gltfRenderer {
         gl.drawArrays(GL.TRIANGLE_STRIP, 0, 4);
 
         gl.enable(gl.DEPTH_TEST);
+        gl.disableVertexAttribArray(posLoc);
+    }
+
+    // Composites the splat isolation framebuffer onto the currently-bound mainFramebuffer.
+    splatCompositePass(state, srgbToLinear) {
+        const gl = this.webGl.context;
+
+        const fragDefines = [];
+        this.pushFragParameterDefines(fragDefines, state);
+        const fragHash = this.shaderCache.selectShader("splat_composite.frag", fragDefines);
+        const vertHash = this.shaderCache.selectShader("fullscreen.vert", []);
+        if (!fragHash || !vertHash) return;
+        const shader = this.shaderCache.getShaderProgram(fragHash, vertHash);
+        if (!shader) return;
+
+        gl.useProgram(shader.program);
+
+        const splatTex = this._floatingPointFramebuffer
+            ? this.splatColorTextureHDR
+            : this.splatColorTexture;
+        const samplerLoc = shader.getUniformLocation("u_SplatSampler");
+        gl.activeTexture(GL.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, splatTex ?? this.splatColorTexture);
+        gl.uniform1i(samplerLoc, 0);
+
+        const srgbLoc = shader.getUniformLocation("u_SrgbToLinear");
+        gl.uniform1i(srgbLoc, srgbToLinear ? 1 : 0);
+        shader.updateUniform("u_Exposure", state.renderingParameters.exposure, false);
+
+        // Bind the fullscreen quad VBO (a_position attribute expected by fullscreen.vert).
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.splatVBO);
+        const posLoc = shader.getAttributeLocation("a_position");
+        gl.enableVertexAttribArray(posLoc);
+        gl.vertexAttribPointer(posLoc, 2, GL.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+        gl.enable(gl.BLEND);
+        this.webGl.context.blendFuncSeparate(
+            GL.SRC_ALPHA,
+            GL.ONE_MINUS_SRC_ALPHA,
+            GL.ONE,
+            GL.ONE_MINUS_SRC_ALPHA
+        );
+        this.webGl.context.blendEquation(GL.FUNC_ADD);
+
+        // No depth test or depth write – this is a pure compositing pass.
+        gl.disable(gl.DEPTH_TEST);
+        gl.depthMask(false);
+
+        gl.drawArrays(GL.TRIANGLE_STRIP, 0, 4);
+
+        // Restore state.
+        gl.disable(gl.BLEND);
+        gl.enable(gl.DEPTH_TEST);
+        gl.depthMask(true);
         gl.disableVertexAttribArray(posLoc);
     }
 
@@ -1550,6 +1719,7 @@ class gltfRenderer {
                 break;
             case GltfState.ToneMaps.NONE:
             default:
+                fragDefines.push("TONEMAP_NONE 1");
                 break;
         }
 

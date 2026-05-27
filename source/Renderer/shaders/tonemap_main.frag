@@ -18,8 +18,8 @@ out vec4 g_finalColor;
 
 void main()
 {
-    vec4  color          = texture(u_MainSampler, v_uv);
     uint splatCoverage = texture(u_TonemapSampler, v_uv).r;
+    vec4  color          = texture(u_MainSampler, v_uv);
 
     if (splatCoverage == 2u) {
         color.rgb = toneMap(color.rgb);

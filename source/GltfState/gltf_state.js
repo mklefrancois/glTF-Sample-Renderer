@@ -69,8 +69,8 @@ class GltfState {
                 /** KHR_gaussian_splatting */
                 KHR_gaussian_splatting: true
             },
-            /** clear color expressed as list of ints in the range [0, 255] */
-            clearColor: [58, 64, 74, 255],
+            /** clear color expressed as list of floats in the range [0, 1] */
+            clearColor: [0.22, 0.25, 0.29, 1],
             /** exposure factor */
             exposure: 1.0,
             /** KHR_lights_punctual */
