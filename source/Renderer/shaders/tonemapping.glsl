@@ -212,28 +212,50 @@ vec3 toneMap_KhronosPbrNeutralInverse(vec3 toneMapped)
 {
     const float startCompression = 0.8 - 0.04;
     const float desaturation = 0.15;
-    
-    // This is an approximation - the forward function has complex conditional logic
-    // that makes perfect inversion difficult
+    const float d = 1.0 - startCompression;
+
     vec3 color = toneMapped;
-    
-    // Try to undo the desaturation mix
-    float peak = max(color.r, max(color.g, color.b));
-    
-    // Approximate inverse of the compression
-    if (peak >= startCompression) {
-        const float d = 1.0 - startCompression;
-        // Approximate inverse of: newPeak = 1. - d * d / (peak + d - startCompression)
-        // This is a rough approximation
-        float originalPeak = peak / (1.0 - peak + startCompression);
-        color *= originalPeak / peak;
+
+    float newPeak = max(color.r, max(color.g, color.b));
+
+    if (newPeak >= startCompression)
+    {
+        // Exact inverse of: newPeak = 1 - d*d / (peak + d - startCompression)
+        // => peak = d*d / (1 - newPeak) - d + startCompression
+        float peak = d * d / (1.0 - newPeak) - d + startCompression;
+
+        // Undo desaturation mix:
+        // forward: color = mix(color_scaled, newPeak * vec3(1), g)
+        // => color_scaled = (color - g * newPeak) / (1 - g)
+        float g = 1.0 - 1.0 / (desaturation * (peak - newPeak) + 1.0);
+        // Guard against divide-by-zero when g ~ 1 (extremely bright/saturated, info lost)
+        if (g < 0.9999)
+        {
+            color = (color - g * newPeak) / (1.0 - g);
+        }
+
+        // Undo peak scaling: forward did color *= newPeak / peak
+        color *= peak / newPeak;
     }
-    
-    // Try to undo the offset
+
+    // Undo offset: forward subtracted offset computed from original x_orig.
+    // For x_orig >= 0.08: offset = 0.04, so x_out = x_orig - 0.04 >= 0.04
+    // For x_orig <  0.08: offset = x_orig - 6.25*x_orig^2, so x_out = 6.25*x_orig^2
+    //   => x_orig = sqrt(x_out / 6.25), threshold in output space: x_out < 0.04
     float x = min(color.r, min(color.g, color.b));
-    float offset = x < 0.08 ? x - 6.25 * x * x : 0.04;
+    float offset;
+    if (x < 0.04)
+    {
+        // Clamp to 0 before sqrt to avoid NaN from floating-point rounding going slightly negative
+        float x_orig = sqrt(max(x, 0.0) / 6.25);
+        offset = x_orig - x;
+    }
+    else
+    {
+        offset = 0.04;
+    }
     color += offset;
-    
+
     return color;
 }
 
