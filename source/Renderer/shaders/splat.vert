@@ -13,6 +13,7 @@ out vec3 v_conic;
 uniform mat4 u_ProjectionMatrix;
 uniform mat4 u_ViewMatrix;
 uniform mat4 u_ModelMatrix;
+uniform mat3 u_ModelRotationInv;
 uniform uint u_TextureWidth;
 uniform ivec2 u_FramebufferSize;
 uniform vec2 u_FocalLength;
@@ -248,7 +249,9 @@ void main()
 
 #ifdef HAS_GAUSSIAN_SPLATTING_DEGREE_1
 
-    vec3 view_dir = normalize(splat_center - u_Camera);
+    vec3 view_dir_world = normalize(splat_center - u_Camera);
+    vec3 view_dir = u_ModelRotationInv * view_dir_world;   // local-frame direction
+
     float x = view_dir.x;
     float y = view_dir.y;
     float z = view_dir.z;

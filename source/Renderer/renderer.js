@@ -1054,6 +1054,12 @@ class gltfRenderer {
             false,
             node.worldTransform
         );
+
+        const rotationMatrixInv = mat3.create();
+        mat3.fromQuat(rotationMatrixInv, node.worldQuaternion);
+        mat3.transpose(rotationMatrixInv, rotationMatrixInv);
+        this.shader.updateUniform("u_ModelRotationInv", rotationMatrixInv);
+
         this.webGl.context.uniformMatrix4fv(
             this.shader.getUniformLocation("u_ViewMatrix"),
             false,
