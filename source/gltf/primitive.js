@@ -62,6 +62,7 @@ class gltfPrimitive extends GltfObject {
     }
 
     //Currently only support types relevant for gaussian splatting
+    // If an alignment of 4 bytes is not possible for a given format, the correct alignment is returned.
     _getInternalTextureFormat(componentType, componentCount, normalized = false) {
         if (componentType === GL.FLOAT) {
             switch (componentCount) {
@@ -76,11 +77,12 @@ class gltfPrimitive extends GltfObject {
         if (componentType === GL.UNSIGNED_BYTE) {
             switch (componentCount) {
                 case 1: // OPACITY
-                    return { internalFormat: GL.R8, format: GL.RED }; // Opacity is always normalized
+                    return { internalFormat: GL.R8, format: GL.RED, alignment: 1 }; // Opacity is always normalized
                 case 3: // POSITION, SCALE
                     return {
                         internalFormat: normalized ? GL.RGB8 : GL.RGB8UI,
-                        format: normalized ? GL.RGB : GL.RGB_INTEGER
+                        format: normalized ? GL.RGB : GL.RGB_INTEGER,
+                        alignment: 1
                     };
             }
         }
@@ -89,7 +91,8 @@ class gltfPrimitive extends GltfObject {
                 case 3: // POSITION
                     return {
                         internalFormat: normalized ? GL.RGB8_SNORM : GL.RGB8I,
-                        format: normalized ? GL.RGB : GL.RGB_INTEGER
+                        format: normalized ? GL.RGB : GL.RGB_INTEGER,
+                        alignment: 1
                     };
                 case 4: // ROTATION
                     return { internalFormat: GL.RGBA8_SNORM, format: GL.RGBA }; // Rotation is always normalized
@@ -100,15 +103,15 @@ class gltfPrimitive extends GltfObject {
         if (componentType === GL.UNSIGNED_SHORT) {
             switch (componentCount) {
                 case 1: // OPACITY
-                    return { internalFormat: GL.R16UI, format: GL.RED_INTEGER };
+                    return { internalFormat: GL.R16UI, format: GL.RED_INTEGER, alignment: 2 }; // Opacity is always normalized
                 case 3: // POSITION, SCALE
-                    return { internalFormat: GL.RGB16UI, format: GL.RGB_INTEGER };
+                    return { internalFormat: GL.RGB16UI, format: GL.RGB_INTEGER, alignment: 2 };
             }
         }
         if (componentType === GL.SHORT) {
             switch (componentCount) {
                 case 3: // POSITION
-                    return { internalFormat: GL.RGB16I, format: GL.RGB_INTEGER };
+                    return { internalFormat: GL.RGB16I, format: GL.RGB_INTEGER, alignment: 2 };
                 case 4: // ROTATION
                     return { internalFormat: GL.RGBA16I, format: GL.RGBA_INTEGER };
             }
@@ -157,6 +160,8 @@ class gltfPrimitive extends GltfObject {
         const data = accessor.getDeinterlacedView(gltf);
         const paddedData = new data.constructor(size * size * componentCount);
         paddedData.set(data);
+
+        webGlContext.pixelStorei(webGlContext.UNPACK_ALIGNMENT, formats.alignment ?? 4);
         webGlContext.texImage2D(
             webGlContext.TEXTURE_2D,
             0, //level
@@ -168,6 +173,7 @@ class gltfPrimitive extends GltfObject {
             accessor.componentType,
             paddedData
         );
+        webGlContext.pixelStorei(webGlContext.UNPACK_ALIGNMENT, 4); // restore default
         // Ensure mipmapping is disabled and the sampler is configured correctly.
         webGlContext.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_WRAP_S, GL.CLAMP_TO_EDGE);
         webGlContext.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_WRAP_T, GL.CLAMP_TO_EDGE);

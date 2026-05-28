@@ -20,27 +20,27 @@ uniform vec2 u_FocalLength;
 uniform vec3 u_Camera;
 
 #ifdef POSITION_IS_INTEGER
-uniform isampler2D u_POSITIONSampler;
+uniform mediump isampler2D u_POSITIONSampler;
 #elif defined(POSITION_IS_UINTEGER)
-uniform usampler2D u_POSITIONSampler;
+uniform mediump usampler2D u_POSITIONSampler;
 #else
 uniform sampler2D u_POSITIONSampler;
 #endif
 
 #ifdef ROTATION_IS_INTEGER
-uniform isampler2D u_ROTATIONSampler;
+uniform mediump isampler2D u_ROTATIONSampler;
 #else
 uniform sampler2D u_ROTATIONSampler;
 #endif
 
 #ifdef SCALE_IS_UINTEGER
-uniform usampler2D u_SCALESampler;
+uniform mediump usampler2D u_SCALESampler;
 #else
 uniform sampler2D u_SCALESampler;
 #endif
 
 #ifdef OPACITY_IS_UINTEGER
-uniform usampler2D u_OPACITYSampler;
+uniform mediump usampler2D u_OPACITYSampler;
 #else
 uniform sampler2D u_OPACITYSampler;
 #endif
