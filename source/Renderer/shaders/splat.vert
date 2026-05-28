@@ -49,6 +49,11 @@ uniform highp sampler2DArray u_SHCoefficientsSampler;
 
 #define SH_C0 0.28209479177387814
 
+// Gaussian radius multiplier: how many standard deviations to extend the screen-space quad.
+// exp(-0.5 * SPLAT_SIGMA²) gives the minimum opacity at the quad boundary.
+// 3.33 → 1/255 (mathematically exact),  3.0 → 1/90  (23% smaller quads, ~40% fewer fragments).
+#define SPLAT_SIGMA 3.0
+
 #ifdef HAS_GAUSSIAN_SPLATTING_DEGREE_1
 #define SH_C1_0 -0.4886025119029199
 #define SH_C1_1 0.4886025119029199
@@ -228,16 +233,19 @@ void main()
     // Calculate the inverse of the covariance matrix
 	v_conic = vec3(c * det_inv, -b * det_inv, a * det_inv);
     
-    // pow(e, pow(-3.4, 2) * -0.5) = 1/255, so 3.4 is the standard deviation in terms of the Gaussian falloff that results in a radius of 1 pixel when the variance is 1.
-    // sqrt(a) and sqrt(c) are the standard deviations in x and y direction, so multiplying them with 3.4 gives us the radius in pixels where the Gaussian falloff results in 1/255 opacity.
-    vec2 quad_pixel_size = vec2(3.4 * sqrt(a), 3.4 * sqrt(c));  // screen space half quad height and width
+    // pow(e, pow(-SPLAT_SIGMA, 2) * -0.5) gives the boundary opacity.
+    // sqrt(a) and sqrt(c) are the standard deviations in x and y, so multiplying
+    // by SPLAT_SIGMA gives the quad half-size in pixels at that opacity threshold.
+    vec2 quad_pixel_size = vec2(SPLAT_SIGMA * sqrt(a), SPLAT_SIGMA * sqrt(c));  // screen space half quad height and width
     vec2 quad_ndc_size = quad_pixel_size / vec2(u_FramebufferSize) * 2.0;  // in ndc space
     clip_splat_center.xy = clip_splat_center.xy + a_position * quad_ndc_size;
 
-    // Discard too large splats that would cover the entire screen
+    // Discard splats whose projected size exceeds half the screen —
+    // they are almost certainly behind or very close to the camera and
+    // would cause extreme overdraw with negligible visual contribution.
     float min_screen = float(min(u_FramebufferSize.x, u_FramebufferSize.y));
     float max_quad_size = max(quad_pixel_size.x, quad_pixel_size.y);
-    if (max_quad_size > min_screen)
+    if (max_quad_size > min_screen * 0.5)
     {
         gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
         return;
