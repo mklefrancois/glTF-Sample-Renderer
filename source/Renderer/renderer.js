@@ -974,7 +974,7 @@ class gltfRenderer {
                     // Composite into mainFramebuffer.
                     gl.bindFramebuffer(gl.FRAMEBUFFER, this.mainFramebuffer);
                     gl.viewport(aspectOffsetX, aspectOffsetY, aspectWidth, aspectHeight);
-                    this.splatCompositePass(state, !drawable.primitive.linear);
+                    this.splatCompositePass(state, drawable.primitive.linear);
                 }
             } else {
                 let renderpassConfiguration = {};
@@ -1183,11 +1183,14 @@ class gltfRenderer {
     }
 
     // Composites the splat isolation framebuffer onto the currently-bound mainFramebuffer.
-    splatCompositePass(state, srgbToLinear) {
+    splatCompositePass(state, isLinear) {
         const gl = this.webGl.context;
 
         const fragDefines = [];
         this.pushFragParameterDefines(fragDefines, state);
+        if (isLinear) {
+            fragDefines.push("LINEAR_OUTPUT 1");
+        }
         const fragHash = this.shaderCache.selectShader("splat_composite.frag", fragDefines);
         const vertHash = this.shaderCache.selectShader("fullscreen.vert", []);
         if (!fragHash || !vertHash) return;
@@ -1204,8 +1207,6 @@ class gltfRenderer {
         gl.bindTexture(gl.TEXTURE_2D, splatTex ?? this.splatColorTexture);
         gl.uniform1i(samplerLoc, 0);
 
-        const srgbLoc = shader.getUniformLocation("u_SrgbToLinear");
-        gl.uniform1i(srgbLoc, srgbToLinear ? 1 : 0);
         shader.updateUniform("u_Exposure", state.renderingParameters.exposure, false);
 
         // Bind the fullscreen quad VBO (a_position attribute expected by fullscreen.vert).

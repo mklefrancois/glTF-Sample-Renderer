@@ -21,6 +21,7 @@ import { gltfVariant } from "./variant.js";
 const allowedExtensions = [
     "KHR_animation_pointer",
     "KHR_draco_mesh_compression",
+    "KHR_gaussian_splatting",
     "KHR_lights_image_based",
     "KHR_lights_punctual",
     "KHR_materials_anisotropy",

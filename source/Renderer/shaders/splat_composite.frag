@@ -8,7 +8,6 @@ precision highp float;
 //   location 1 – toneMapFlag  1u = "linearToSRGB" for the tonemap_main pass
 
 uniform sampler2D u_SplatSampler;
-uniform bool      u_SrgbToLinear;
 
 in vec2 v_uv;
 
@@ -28,9 +27,9 @@ void main() {
     } 
 #endif
     splat.rgb = clamp(splat.rgb, vec3(0.0), vec3(1.0));
-    if (u_SrgbToLinear) {
-        splat.rgb  = sRGBToLinear(splat.rgb);
-    }
+#ifndef LINEAR_OUTPUT
+    splat.rgb  = sRGBToLinear(splat.rgb);
+#endif
     g_finalColor  = splat;
     // The composited content is linear; tonemap_main.frag should apply
     // linearToSRGB (flag value 0) in its final step.
