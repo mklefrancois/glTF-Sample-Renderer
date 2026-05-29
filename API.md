@@ -117,6 +117,7 @@ GltfState containing a state for visualization in GltfView
         * [.animationIndices](#GltfState+animationIndices)
         * [.animationTimer](#GltfState+animationTimer)
         * [.variant](#GltfState+variant)
+        * [.needsRedraw](#GltfState+needsRedraw)
         * [.renderingParameters](#GltfState+renderingParameters)
             * [.morphing](#GltfState+renderingParameters.morphing)
             * [.skinning](#GltfState+renderingParameters.skinning)
@@ -132,6 +133,7 @@ GltfState containing a state for visualization in GltfView
             * [.environmentRotation](#GltfState+renderingParameters.environmentRotation)
             * [.useDirectionalLightsWithDisabledIBL](#GltfState+renderingParameters.useDirectionalLightsWithDisabledIBL)
             * [.internalMSAA](#GltfState+renderingParameters.internalMSAA)
+            * [.floatingPointFramebuffer](#GltfState+renderingParameters.floatingPointFramebuffer)
     * _static_
         * [.ToneMaps](#GltfState.ToneMaps)
             * [.KHR_PBR_NEUTRAL](#GltfState.ToneMaps.KHR_PBR_NEUTRAL)
@@ -240,6 +242,12 @@ animation timer allows to control the animation time
 KHR_materials_variants
 
 **Kind**: instance property of [<code>GltfState</code>](#GltfState)  
+<a name="GltfState+needsRedraw"></a>
+
+### gltfState.needsRedraw
+Indicates whether the view needs to be redrawn, currently used to indicate new sorting orders for gaussian splatting
+
+**Kind**: instance property of [<code>GltfState</code>](#GltfState)  
 <a name="GltfState+renderingParameters"></a>
 
 ### gltfState.renderingParameters
@@ -262,6 +270,7 @@ parameters used to configure the rendering
     * [.environmentRotation](#GltfState+renderingParameters.environmentRotation)
     * [.useDirectionalLightsWithDisabledIBL](#GltfState+renderingParameters.useDirectionalLightsWithDisabledIBL)
     * [.internalMSAA](#GltfState+renderingParameters.internalMSAA)
+    * [.floatingPointFramebuffer](#GltfState+renderingParameters.floatingPointFramebuffer)
 
 <a name="GltfState+renderingParameters.morphing"></a>
 
@@ -278,7 +287,7 @@ skin / skeleton
 <a name="GltfState+renderingParameters.clearColor"></a>
 
 #### renderingParameters.clearColor
-clear color expressed as list of ints in the range [0, 255]
+clear color expressed as list of floats in the range [0, 1]
 
 **Kind**: static property of [<code>renderingParameters</code>](#GltfState+renderingParameters)  
 <a name="GltfState+renderingParameters.exposure"></a>
@@ -350,6 +359,12 @@ If this is set to true, directional lights will be generated if IBL is disabled
 
 #### renderingParameters.internalMSAA
 MSAA used for cases which are not handled by the browser (e.g. Transmission)
+
+**Kind**: static property of [<code>renderingParameters</code>](#GltfState+renderingParameters)  
+<a name="GltfState+renderingParameters.floatingPointFramebuffer"></a>
+
+#### renderingParameters.floatingPointFramebuffer
+Use RGBA16F floating-point main framebuffer instead of RGBA8
 
 **Kind**: static property of [<code>renderingParameters</code>](#GltfState+renderingParameters)  
 <a name="GltfState.ToneMaps"></a>
@@ -1010,7 +1025,9 @@ Fit view to updated canvas size without changing rotation if distance is incorre
 <a name="ResourceLoaderUtils"></a>
 
 ## ResourceLoaderUtils
-Utility class providing static helper methods for resource loading operations,such as extracting file extensions, resolving folder paths, normalizing relativepaths, and detecting absolute URLs.
+Utility class providing static helper methods for resource loading operations,
+such as extracting file extensions, resolving folder paths, normalizing relative
+paths, and detecting absolute URLs.
 
 **Kind**: global class  
 
@@ -1026,7 +1043,8 @@ Utility class providing static helper methods for resource loading operations,s
 Extracts the file extension from a filename.
 
 **Kind**: static method of [<code>ResourceLoaderUtils</code>](#ResourceLoaderUtils)  
-**Returns**: <code>string</code> \| <code>undefined</code> - The lowercase file extension (without the leading dot),  or `undefined` if the filename has no extension.  
+**Returns**: <code>string</code> \| <code>undefined</code> - The lowercase file extension (without the leading dot),
+  or `undefined` if the filename has no extension.  
 
 | Param | Type | Description |
 | --- | --- | --- |
@@ -1038,7 +1056,8 @@ Extracts the file extension from a filename.
 Returns the directory portion of a file path, including the trailing slash.
 
 **Kind**: static method of [<code>ResourceLoaderUtils</code>](#ResourceLoaderUtils)  
-**Returns**: <code>string</code> - The path up to and including the last `/`, or an empty string  if no `/` is present.  
+**Returns**: <code>string</code> - The path up to and including the last `/`, or an empty string
+  if no `/` is present.  
 
 | Param | Type | Description |
 | --- | --- | --- |
@@ -1047,7 +1066,10 @@ Returns the directory portion of a file path, including the trailing slash.
 <a name="ResourceLoaderUtils.cleanRelativePath"></a>
 
 ### ResourceLoaderUtils.cleanRelativePath(relativePath) ⇒ <code>string</code>
-Normalizes a relative URL path by resolving `.` and `..` segments.- Strips a leading `./` prefix.- Collapses `/./` sequences to `/`.- Resolves `/../` sequences by removing the preceding path segment.
+Normalizes a relative URL path by resolving `.` and `..` segments.
+- Strips a leading `./` prefix.
+- Collapses `/./` sequences to `/`.
+- Resolves `/../` sequences by removing the preceding path segment.
 
 **Kind**: static method of [<code>ResourceLoaderUtils</code>](#ResourceLoaderUtils)  
 **Returns**: <code>string</code> - The normalized path with dot segments resolved.  
@@ -1059,7 +1081,8 @@ Normalizes a relative URL path by resolving `.` and `..` segments.- Strips a le
 <a name="ResourceLoaderUtils.isAbsoluteUrl"></a>
 
 ### ResourceLoaderUtils.isAbsoluteUrl(url) ⇒ <code>boolean</code>
-Determines whether a URL is absolute (i.e. contains a scheme such as `http:` or `data:`).A URL is considered absolute when it contains a `:` that appears before any `/`.
+Determines whether a URL is absolute (i.e. contains a scheme such as `http:` or `data:`).
+A URL is considered absolute when it contains a `:` that appears before any `/`.
 
 **Kind**: static method of [<code>ResourceLoaderUtils</code>](#ResourceLoaderUtils)  
 **Returns**: <code>boolean</code> - `true` if the URL is absolute, `false` otherwise.  
