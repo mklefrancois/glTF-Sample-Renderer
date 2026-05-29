@@ -45,7 +45,7 @@ uniform mediump usampler2D u_OPACITYSampler;
 uniform sampler2D u_OPACITYSampler;
 #endif
 
-uniform highp sampler2DArray u_SHCoefficientsSampler;
+uniform mediump sampler2DArray u_SHCoefficientsSampler;
 
 #define SH_C0 0.28209479177387814
 
@@ -174,40 +174,6 @@ void main()
     opacity = texelFetch(u_OPACITYSampler, texelCoord, 0).x;
 #endif
 
-    // Fetch SH coefficients early to avoid GPU stall
-    // Degree 0
-    vec3 sh0 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 0), 0).rgb;
-
-#ifdef HAS_GAUSSIAN_SPLATTING_DEGREE_1
-    // Degree 1
-    vec3 sh1_0 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 1), 0).rgb;
-    vec3 sh1_1 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 2), 0).rgb;
-    vec3 sh1_2 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 3), 0).rgb;
-
-
-#ifdef HAS_GAUSSIAN_SPLATTING_DEGREE_2
-    // Degree 2
-    vec3 sh2_0 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 4), 0).rgb;
-    vec3 sh2_1 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 5), 0).rgb;
-    vec3 sh2_2 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 6), 0).rgb;
-    vec3 sh2_3 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 7), 0).rgb;
-    vec3 sh2_4 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 8), 0).rgb;
-
-
-#ifdef HAS_GAUSSIAN_SPLATTING_DEGREE_3
-    // Degree 3
-    vec3 sh3_0 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 9), 0).rgb;
-    vec3 sh3_1 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 10), 0).rgb;
-    vec3 sh3_2 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 11), 0).rgb;
-    vec3 sh3_3 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 12), 0).rgb;
-    vec3 sh3_4 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 13), 0).rgb;
-    vec3 sh3_5 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 14), 0).rgb;
-    vec3 sh3_6 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 15), 0).rgb;
-#endif
-
-#endif
-#endif
-
     splat_center = (u_ModelMatrix * vec4(splat_center, 1.0)).xyz;
 
     vec4 view_splat_center = u_ViewMatrix * vec4(splat_center, 1.0);
@@ -252,6 +218,36 @@ void main()
     }
     v_uv = a_position * quad_pixel_size;
     gl_Position = clip_splat_center;
+
+    // Degree 0
+    vec3 sh0 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 0), 0).rgb;
+
+#ifdef HAS_GAUSSIAN_SPLATTING_DEGREE_1
+    // Degree 1
+    vec3 sh1_0 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 1), 0).rgb;
+    vec3 sh1_1 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 2), 0).rgb;
+    vec3 sh1_2 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 3), 0).rgb;
+
+#ifdef HAS_GAUSSIAN_SPLATTING_DEGREE_2
+    // Degree 2
+    vec3 sh2_0 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 4), 0).rgb;
+    vec3 sh2_1 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 5), 0).rgb;
+    vec3 sh2_2 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 6), 0).rgb;
+    vec3 sh2_3 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 7), 0).rgb;
+    vec3 sh2_4 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 8), 0).rgb;
+
+#ifdef HAS_GAUSSIAN_SPLATTING_DEGREE_3
+    // Degree 3
+    vec3 sh3_0 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 9), 0).rgb;
+    vec3 sh3_1 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 10), 0).rgb;
+    vec3 sh3_2 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 11), 0).rgb;
+    vec3 sh3_3 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 12), 0).rgb;
+    vec3 sh3_4 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 13), 0).rgb;
+    vec3 sh3_5 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 14), 0).rgb;
+    vec3 sh3_6 = texelFetch(u_SHCoefficientsSampler, ivec3(texelCoord, 15), 0).rgb;
+#endif
+#endif
+#endif
 
     vec3 color = sh0 * SH_C0;
 

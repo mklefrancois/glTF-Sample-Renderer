@@ -226,7 +226,10 @@ class gltfPrimitive extends GltfObject {
         let texture = webGlContext.createTexture();
         webGlContext.bindTexture(webGlContext.TEXTURE_2D_ARRAY, texture);
         // Set texture format and upload data.
-        let internalFormat = componentCount === 4 ? webGlContext.RGBA32F : webGlContext.RGB32F;
+        // Use 16-bit half-precision floats: half the bandwidth of RGB32F with negligible
+        // quality loss for SH coefficients. WebGL2 accepts Float32Array with FLOAT type
+        // when the internal format is a 16F format — the driver converts on upload.
+        let internalFormat = componentCount === 4 ? webGlContext.RGBA16F : webGlContext.RGB16F;
         let format = componentCount === 4 ? webGlContext.RGBA : webGlContext.RGB;
         let type = webGlContext.FLOAT;
         webGlContext.texImage3D(
