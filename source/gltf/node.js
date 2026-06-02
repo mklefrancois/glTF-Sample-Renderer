@@ -29,7 +29,6 @@ class gltfNode extends GltfObject {
         this.worldQuaternion = quat.create();
         this.worldScale = vec3.create();
         this.inverseWorldTransform = mat4.create();
-        this.normalMatrix = mat4.create();
         this.light = undefined;
         this.instanceMatrices = undefined;
         this.instanceWorldTransforms = undefined;
