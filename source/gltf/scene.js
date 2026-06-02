@@ -26,15 +26,15 @@ class gltfScene extends GltfObject {
             const nodeDirty = parentDirty || node.isLocalTransformDirty();
             node.dirtyTransform = nodeDirty;
             node.dirtyScale = false;
-
-            mat4.multiply(node.worldTransform, parentTransform, node.getLocalTransform());
-            mat4.invert(node.inverseWorldTransform, node.getRenderedWorldTransform());
-            mat4.transpose(node.normalMatrix, node.inverseWorldTransform);
-            quat.multiply(node.worldQuaternion, parentRotation, node.rotation);
-            mat4.getScaling(node.worldScale, node.getRenderedWorldTransform());
-
-            if (nodeDirty && (parentScaleDirty || node.animatedPropertyObjects["scale"].dirty)) {
-                node.dirtyScale = true;
+            if (nodeDirty) {
+                mat4.multiply(node.worldTransform, parentTransform, node.getLocalTransform());
+                mat4.invert(node.inverseWorldTransform, node.worldTransform);
+                mat4.transpose(node.normalMatrix, node.inverseWorldTransform);
+                quat.multiply(node.worldQuaternion, parentRotation, node.rotation);
+                mat4.getScaling(node.worldScale, node.worldTransform);
+                if (parentScaleDirty || node.animatedPropertyObjects["scale"].dirty) {
+                    node.dirtyScale = true;
+                }
             }
 
             if (nodeDirty && node.instanceMatrices) {
@@ -42,7 +42,7 @@ class gltfScene extends GltfObject {
                 for (let i = 0; i < node.instanceMatrices.length; i++) {
                     const instanceTransform = node.instanceMatrices[i];
                     const instanceWorldTransform = mat4.create();
-                    mat4.multiply(instanceWorldTransform, node.getRenderedWorldTransform(), instanceTransform);
+                    mat4.multiply(instanceWorldTransform, node.worldTransform, instanceTransform);
                     node.instanceWorldTransforms.push(instanceWorldTransform);
                 }
             }
