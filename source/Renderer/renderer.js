@@ -953,6 +953,9 @@ class gltfRenderer {
                 drawable.primitive.extensions?.KHR_gaussian_splatting !== undefined &&
                 state.renderingParameters.enabledExtensions.KHR_gaussian_splatting
             ) {
+                if (currentCamera.type !== "perspective") {
+                    console.warn("Splat rendering with non-perspective projection is undefined");
+                }
                 // Isolate this splat in its own framebuffer pass.
                 if (this.splatFramebuffer) {
                     const gl = this.webGl.context;
