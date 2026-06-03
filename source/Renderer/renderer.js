@@ -1003,7 +1003,8 @@ class gltfRenderer {
         if (primitive.skip) return;
         // Request an async worker sort each frame (no-op if the previous sort
         // has not yet finished or no worker is available).
-        primitive.requestSort(viewMatrix);
+        const modelViewMatrix = mat4.multiply(mat4.create(), viewMatrix, node.worldTransform);
+        primitive.requestSort(modelViewMatrix);
         if (primitive.sortPending) {
             this.needsRedraw = true;
         }

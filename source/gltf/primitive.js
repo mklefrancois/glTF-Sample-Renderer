@@ -769,29 +769,29 @@ class gltfPrimitive extends GltfObject {
      * Request an asynchronous back-to-front sort of the splat indices.
      * Safe to call every frame — the request is dropped while a previous sort
      * is still in flight.
-     * @param {Float32Array} viewMatrix  Column-major 4×4 view matrix.
+     * @param {Float32Array} modelViewMatrix  Column-major 4×4 model-view matrix (view * world).
      */
-    requestSort(viewMatrix) {
+    requestSort(modelViewMatrix) {
         if (this.sortWorker === undefined) {
             return;
         }
         if (!this.sortWorkerReady || this.sortPending) {
             // Worker is busy — keep the latest matrix so it sorts immediately once ready
-            this.queuedViewMatrix = new Float32Array(viewMatrix);
+            this.queuedViewMatrix = new Float32Array(modelViewMatrix);
             return;
         }
         // Skip if the view matrix hasn't changed since the last dispatched sort.
         if (this.lastSortViewMatrix !== undefined) {
             let same = true;
             for (let i = 0; i < 16; i++) {
-                if (this.lastSortViewMatrix[i] !== viewMatrix[i]) {
+                if (this.lastSortViewMatrix[i] !== modelViewMatrix[i]) {
                     same = false;
                     break;
                 }
             }
             if (same) return;
         }
-        const vm = new Float32Array(viewMatrix);
+        const vm = new Float32Array(modelViewMatrix);
         this.lastSortViewMatrix = vm;
         this.sortPending = true;
         this.sortWorker.postMessage({ type: "sort", viewMatrix: vm });
