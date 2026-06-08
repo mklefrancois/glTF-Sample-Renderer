@@ -60,6 +60,9 @@ class ResourceLoaderUtils {
      * @returns {boolean} `true` if the URL is absolute, `false` otherwise.
      */
     static isAbsoluteUrl(url) {
+        if (url.startsWith("data:")) {
+            return false;
+        }
         const colonIndex = url.indexOf(":");
         const slashIndex = url.indexOf("/");
         return colonIndex !== -1 && (slashIndex === -1 || colonIndex < slashIndex);
