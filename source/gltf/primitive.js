@@ -394,9 +394,15 @@ class gltfPrimitive extends GltfObject {
 
     copyDataFromDecodedGeometry(gltf, dracoGeometry, primitiveAttributes) {
         // indices
-        let indexBuffer = dracoGeometry.index.array;
         if (this.indices !== undefined) {
+            let indexBuffer = this.loadArrayIntoArrayBuffer(
+                dracoGeometry.index.array,
+                dracoGeometry.index.array.constructor.name
+            );
             this.loadBufferIntoGltf(indexBuffer, gltf, this.indices, 34963, "index buffer view");
+
+            // DRACO decoder always outputs uint32 indices
+            gltf.accessors[this.indices].componentType = GL.UNSIGNED_INT;
         }
 
         // Position
