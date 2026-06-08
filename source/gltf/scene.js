@@ -29,7 +29,6 @@ class gltfScene extends GltfObject {
             if (nodeDirty) {
                 mat4.multiply(node.worldTransform, parentTransform, node.getLocalTransform());
                 mat4.invert(node.inverseWorldTransform, node.worldTransform);
-                mat4.transpose(node.normalMatrix, node.inverseWorldTransform);
                 quat.multiply(node.worldQuaternion, parentRotation, node.rotation);
                 mat4.getScaling(node.worldScale, node.worldTransform);
                 if (parentScaleDirty || node.animatedPropertyObjects["scale"].dirty) {

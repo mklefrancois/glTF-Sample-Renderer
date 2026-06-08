@@ -1139,11 +1139,15 @@ class gltfRenderer {
         }
 
         const worldTransform = node.getRenderedWorldTransform();
+      
+        const normalMatrix = mat4.create();
+        mat4.invert(normalMatrix, node.getRenderedWorldTransform());
+        mat4.transpose(normalMatrix, normalMatrix);
 
         // update model dependant matrices once per node
         this.shader.updateUniform("u_ViewProjectionMatrix", viewProjectionMatrix);
         this.shader.updateUniform("u_ModelMatrix", worldTransform);
-        this.shader.updateUniform("u_NormalMatrix", node.normalMatrix, false);
+        this.shader.updateUniform("u_NormalMatrix", normalMatrix, false);
         this.shader.updateUniform("u_Exposure", state.renderingParameters.exposure, false);
         this.shader.updateUniform("u_Camera", this.currentCameraPosition, false);
         if (renderpassConfiguration.picking) {
