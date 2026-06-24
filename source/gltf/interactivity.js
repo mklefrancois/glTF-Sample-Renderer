@@ -24,7 +24,7 @@ class gltfGraph extends GltfObject {
  * A controller for managing KHR_interactivity graphs in a glTF scene.
  */
 class GraphController {
-    constructor(fps = 60, debug = false) {
+    constructor(fps = 60, debug = true) {
         this.fps = fps;
         this.debug = debug;
         this.graphIndex = undefined;
@@ -53,12 +53,14 @@ class GraphController {
     }
 
     receiveSelection(pickingResult) {
+        console.log("receiveSelection", pickingResult);
         if (this.graphIndex !== undefined) {
             this.decorator.receiveSelection(pickingResult);
         }
     }
 
     receiveHover(pickingResult) {
+        console.log("receiveHover", pickingResult);
         if (this.graphIndex !== undefined) {
             this.decorator.receiveHover(pickingResult);
         }
@@ -244,6 +246,7 @@ class SampleViewerDecorator extends interactivity.ADecorator {
     receiveSelection(pickingResult) {
         if (pickingResult.node) {
             this.select(
+                pickingResult.node?.gltfObjectIndex,
                 pickingResult.node?.gltfObjectIndex,
                 pickingResult.controller,
                 pickingResult.position,
