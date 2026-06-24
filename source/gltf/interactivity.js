@@ -136,6 +136,7 @@ class GraphController {
             return;
         }
         this.playing = true;
+        this.decorator.playEventQueue();
     }
 
     /**
