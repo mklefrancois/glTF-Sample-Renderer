@@ -53,14 +53,12 @@ class GraphController {
     }
 
     receiveSelection(pickingResult) {
-        console.log("receiveSelection", pickingResult);
         if (this.graphIndex !== undefined) {
             this.decorator.receiveSelection(pickingResult);
         }
     }
 
     receiveHover(pickingResult) {
-        console.log("receiveHover", pickingResult);
         if (this.graphIndex !== undefined) {
             this.decorator.receiveHover(pickingResult);
         }
