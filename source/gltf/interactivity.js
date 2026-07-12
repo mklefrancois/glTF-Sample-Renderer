@@ -851,8 +851,6 @@ class SampleViewerDecorator extends interactivity.ADecorator {
     }
 
     startAnimation(animationIndex, startTime, endTime, speed, callback) {
-        console.log("Start animation", animationIndex, "from", startTime, "to", endTime, "speed", speed);
-
         const animation = this.world.gltf.animations[animationIndex];
         animation.createdTimestamp = undefined;
         animation.startTime = startTime;
