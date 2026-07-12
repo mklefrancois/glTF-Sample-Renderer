@@ -245,7 +245,6 @@ class SampleViewerDecorator extends interactivity.ADecorator {
         if (pickingResult.node) {
             this.select(
                 pickingResult.node?.gltfObjectIndex,
-                pickingResult.node?.gltfObjectIndex,
                 pickingResult.controller,
                 pickingResult.position,
                 pickingResult.rayOrigin
@@ -318,15 +317,15 @@ class SampleViewerDecorator extends interactivity.ADecorator {
     }
 
     processNodeStarted(node) {
-        console.log("Node started:", node);
+        // console.log("Node started:", node);
     }
 
     processAddingNodeToQueue(flow) {
-        console.log("Adding node to queue:", flow);
+        // console.log("Adding node to queue:", flow);
     }
 
     processExecutingNextNode(flow) {
-        console.log("Executing next node:", flow);
+        // console.log("Executing next node:", flow);
     }
 
     getTypeFromValue(value) {
@@ -685,6 +684,15 @@ class SampleViewerDecorator extends interactivity.ADecorator {
 
         const animationCount = this.world.gltf.animations.length;
         this.registerJsonPointer(
+            `/animations/${animationCount}`,
+            (_path) => {
+                console.error("Direct access to animation object is not allowed. Use specific properties instead.");
+            },
+            (_path, _value) => {},
+            "bool",
+            true
+        );
+        this.registerJsonPointer(
             `/animations/${animationCount}/extensions/KHR_interactivity/isPlaying`,
             (path) => {
                 const pathParts = path.split("/");
@@ -843,6 +851,8 @@ class SampleViewerDecorator extends interactivity.ADecorator {
     }
 
     startAnimation(animationIndex, startTime, endTime, speed, callback) {
+        console.log("Start animation", animationIndex, "from", startTime, "to", endTime, "speed", speed);
+
         const animation = this.world.gltf.animations[animationIndex];
         animation.createdTimestamp = undefined;
         animation.startTime = startTime;
