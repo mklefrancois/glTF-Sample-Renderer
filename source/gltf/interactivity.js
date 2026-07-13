@@ -684,15 +684,6 @@ class SampleViewerDecorator extends interactivity.ADecorator {
 
         const animationCount = this.world.gltf.animations.length;
         this.registerJsonPointer(
-            `/animations/${animationCount}`,
-            (_path) => {
-                console.error("Direct access to animation object is not allowed. Use specific properties instead.");
-            },
-            (_path, _value) => {},
-            "bool",
-            true
-        );
-        this.registerJsonPointer(
             `/animations/${animationCount}/extensions/KHR_interactivity/isPlaying`,
             (path) => {
                 const pathParts = path.split("/");
