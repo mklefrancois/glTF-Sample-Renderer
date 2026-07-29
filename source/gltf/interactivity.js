@@ -584,15 +584,8 @@ class SampleViewerDecorator extends interactivity.ADecorator {
         );
 
         const nodeCount = this.world.gltf.nodes.length;
-        this.registerJsonPointer(
-            `/nodes/${nodeCount}/children/${nodeCount}`,
-            (path) => {
-                return [this.traversePath(path, "int")];
-            },
-            (_path, _value) => {},
-            "int",
-            true
-        );
+        const meshCount = this.world.gltf.meshes.length;
+        const primitiveCount = Math.max(...this.world.gltf.meshes.map(mesh => mesh.primitives.length));
 
         // Returns the currently computed global matrix of the node
         this.registerJsonPointer(
@@ -623,17 +616,123 @@ class SampleViewerDecorator extends interactivity.ADecorator {
             true
         );
 
-        // Returns the parent node index of the node
+        // Returns the parent node of the node
         this.registerJsonPointer(
             `/nodes/${nodeCount}/parent`,
             (path) => {
                 const pathParts = path.split("/");
                 const nodeIndex = parseInt(pathParts[2]);
                 const node = this.world.gltf.nodes[nodeIndex];
-                return [node.parentNode?.gltfObjectIndex];
+                const index = node.parentNode?.gltfObjectIndex;
+                if (index === undefined) {
+                    return [undefined];
+                }
+                return [`/nodes/${index}`];
+            },
+            (_path, _value) => {},
+            "ref",
+            true
+        );
+
+        // Returns the child node of the node
+        this.registerJsonPointer(
+            `/nodes/${nodeCount}/children.length`,
+            (path) => {
+                const pathParts = path.split("/");
+                const nodeIndex = parseInt(pathParts[2]);
+                const node = this.world.gltf.nodes[nodeIndex];
+                return [node.children?.length ?? 0];
             },
             (_path, _value) => {},
             "int",
+            true
+        );
+        
+        this.registerJsonPointer(
+            `/nodes/${nodeCount}/children/${nodeCount}`,
+            (path) => {
+                const pathParts = path.split("/");
+                const nodeIndex = parseInt(pathParts[2]);
+                const childIndex = parseInt(pathParts[4]);
+                const node = this.world.gltf.nodes[nodeIndex];
+                const childNodeIndex = node.children?.[childIndex];
+                if (childNodeIndex >= this.world.gltf.nodes.length) {
+                    return [undefined];
+                }
+                return [`/nodes/${childNodeIndex}`];
+            },
+            (_path, _value) => {},
+            "ref",
+            true
+        );
+        
+        this.registerJsonPointer(
+            `/nodes/${nodeCount}/camera`,
+            (path) => {
+                const pathParts = path.split("/");
+                const nodeIndex = parseInt(pathParts[2]);
+                const node = this.world.gltf.nodes[nodeIndex];
+                const cameraIndex = node.camera;
+                if (cameraIndex === undefined) {
+                    return [undefined];
+                }
+                return [`/cameras/${cameraIndex}`];
+            },
+            (_path, _value) => {},
+            "ref",
+            true
+        );
+        
+        this.registerJsonPointer(
+            `/nodes/${nodeCount}/mesh`,
+            (path) => {
+                const pathParts = path.split("/");
+                const nodeIndex = parseInt(pathParts[2]);
+                const node = this.world.gltf.nodes[nodeIndex];
+                const meshIndex = node.mesh;
+                if (meshIndex === undefined) {
+                    return [undefined];
+                }
+                return [`/meshes/${meshIndex}`];
+            },
+            (_path, _value) => {},
+            "ref",
+            true
+        );
+        
+        this.registerJsonPointer(
+            `/nodes/${nodeCount}/skin`,
+            (path) => {
+                const pathParts = path.split("/");
+                const nodeIndex = parseInt(pathParts[2]);
+                const node = this.world.gltf.nodes[nodeIndex];
+                const skinIndex = node.skin;
+                if (skinIndex === undefined) {
+                    return [undefined];
+                }
+                return [`/skins/${skinIndex}`];
+            },
+            (_path, _value) => {},
+            "ref",
+            true
+        );
+
+        // Returns the child node of the node
+        this.registerJsonPointer(
+            `/meshes/${meshCount}/primitives/${primitiveCount}/material`,
+            (path) => {
+                const pathParts = path.split("/");
+                const meshIndex = parseInt(pathParts[2]);
+                const primitiveIndex = parseInt(pathParts[4]);
+                const mesh = this.world.gltf.meshes[meshIndex];
+                if (mesh === undefined || mesh.primitives === undefined || primitiveIndex >= mesh.primitives.length) {
+                    return [undefined];
+                }
+                const materialIndex = mesh.primitives[primitiveIndex].material;
+                return [`/materials/${materialIndex}`];
+            },
+            (_path, _value) => {},
+            "ref",
             true
         );
 
@@ -642,10 +741,10 @@ class SampleViewerDecorator extends interactivity.ADecorator {
         this.registerJsonPointer(
             `/nodes/${nodeCount}/extensions/KHR_lights_punctual/light`,
             (path) => {
-                return [this.traversePath(path, "int")];
+                return [this.traversePath(path, "ref")];
             },
             (_path, _value) => {},
-            "int",
+            "ref",
             true
         );
 
@@ -653,10 +752,17 @@ class SampleViewerDecorator extends interactivity.ADecorator {
         this.registerJsonPointer(
             `/scenes/${sceneCount}/nodes/${nodeCount}`,
             (path) => {
-                return [this.traversePath(path, "int")];
+                const pathParts = path.split("/");
+                const sceneIndex = parseInt(pathParts[2]);
+                const nodeIndex = parseInt(pathParts[4]);
+                const sceneNodeIndex = this.world.gltf.scenes[sceneIndex].nodes[nodeIndex];
+                if (sceneNodeIndex === undefined) {
+                    return [undefined];
+                }
+                return [`/nodes/${sceneNodeIndex}`];
             },
             (_path, _value) => {},
-            "int",
+            "ref",
             true
         );
 
@@ -664,10 +770,34 @@ class SampleViewerDecorator extends interactivity.ADecorator {
         this.registerJsonPointer(
             `/skins/${skinCount}/joints/${nodeCount}`,
             (path) => {
-                return [this.traversePath(path, "int")];
+                const pathParts = path.split("/");
+                const skinIndex = parseInt(pathParts[2]);
+                const jointIndex = parseInt(pathParts[4]);
+                const skin = this.world.gltf.skins[skinIndex];
+                if (jointIndex < 0 || jointIndex >= skin.joints.length) {
+                    return [undefined];
+                }
+                const jointNodeIndex = skin.joints[jointIndex];
+                return [`/nodes/${jointNodeIndex}`];
             },
             (_path, _value) => {},
-            "int",
+            "ref",
+            true
+        );
+        this.registerJsonPointer(
+            `/skins/${skinCount}/skeleton`,
+            (path) => {
+                const pathParts = path.split("/");
+                const skinIndex = parseInt(pathParts[2]);
+                const skin = this.world.gltf.skins[skinIndex];
+                const jointNodeIndex = skin.skeleton;
+                if (jointNodeIndex === undefined) {
+                    return [undefined];
+                }
+                return [`/nodes/${jointNodeIndex}`];
+            },
+            (_path, _value) => {},
+            "ref",
             true
         );
 
