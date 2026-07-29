@@ -201,19 +201,10 @@ class SampleViewerDecorator extends interactivity.ADecorator {
             this.behaveEngine.processExecutingNextNode = this.processExecutingNextNode;
         }
         this.behaveEngine.getWorld = this.getWorld;
-
         this.behaveEngine.stopAnimation = this.stopAnimation;
         this.behaveEngine.stopAnimationAt = this.stopAnimationAt;
         this.behaveEngine.startAnimation = this.startAnimation;
         this.behaveEngine.getParentNodeIndex = this.getParentNodeIndex;
-
-        this.registerBehaveEngineNode("animation/stop", interactivity.AnimationStop);
-        this.registerBehaveEngineNode("animation/start", interactivity.AnimationStart);
-        this.registerBehaveEngineNode("animation/stopAt", interactivity.AnimationStopAt);
-
-        this.registerBehaveEngineNode("event/onSelect", interactivity.OnSelect);
-        this.registerBehaveEngineNode("event/onHoverIn", interactivity.OnHoverIn);
-        this.registerBehaveEngineNode("event/onHoverOut", interactivity.OnHoverOut);
     }
 
     dispatchCustomEvent(eventName, data) {
