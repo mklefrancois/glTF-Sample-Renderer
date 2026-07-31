@@ -30,7 +30,8 @@ precision highp float;
 #endif
 
 
-out vec4 g_finalColor;
+layout(location = 0) out vec4 g_finalColor;
+layout(location = 1) out uint toneMapFlag;
 
 
 void main()
@@ -48,11 +49,13 @@ void main()
     }
     baseColor.a = 1.0;
 #endif
-#ifdef LINEAR_OUTPUT
+#ifdef TRANSMISSION_PASS
 // If used for transmission, we need to invert exposure and tone mapping, so the original color is computed in the general render pass
     g_finalColor = vec4(toneMapInverse(baseColor.rgb), baseColor.a);
+    toneMapFlag = 2u;
 #else
-    g_finalColor = vec4(linearTosRGB(baseColor.rgb), baseColor.a);
+    g_finalColor = baseColor;
+    toneMapFlag = 1u;
 #endif
 // PBR Flow. This else goes all the way to the end of the file
 #else
@@ -397,14 +400,14 @@ void main()
     baseColor.a = 1.0;
 #endif
 
-#ifdef LINEAR_OUTPUT
+
     g_finalColor = vec4(color.rgb, baseColor.a);
-#else
-    g_finalColor = vec4(toneMap(color), baseColor.a);
-#endif
+    toneMapFlag = 2u;
+
 
 #else
     // In case of missing data for a debug view, render a checkerboard.
+    toneMapFlag = 0u;
     g_finalColor = vec4(1.0);
     {
         float frequency = 0.02;

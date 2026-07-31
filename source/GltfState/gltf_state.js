@@ -31,6 +31,9 @@ class GltfState {
         /** KHR_materials_variants */
         this.variant = undefined;
 
+        /** Indicates whether the view needs to be redrawn, currently used to indicate new sorting orders for gaussian splatting */
+        this.needsRedraw = false;
+
         /** parameters used to configure the rendering */
         this.renderingParameters = {
             /** morphing between vertices */
@@ -55,15 +58,19 @@ class GltfState {
                 KHR_materials_specular: true,
                 /** KHR_materials_iridescence adds a thin-film iridescence effect */
                 KHR_materials_iridescence: true,
+                /** KHR_materials_diffuse_transmission */
                 KHR_materials_diffuse_transmission: true,
                 /** KHR_materials_anisotropy defines microfacet grooves in the surface, stretching the specular reflection on the surface */
                 KHR_materials_anisotropy: true,
                 /** KHR_materials_dispersion defines configuring the strength of the angular separation of colors (chromatic abberation)*/
                 KHR_materials_dispersion: true,
-                KHR_materials_emissive_strength: true
+                /** KHR_materials_emissive_strength allows configuring the strength of the emissive component */
+                KHR_materials_emissive_strength: true,
+                /** KHR_gaussian_splatting */
+                KHR_gaussian_splatting: true
             },
-            /** clear color expressed as list of ints in the range [0, 255] */
-            clearColor: [58, 64, 74, 255],
+            /** clear color expressed as list of floats in the range [0, 1] */
+            clearColor: [0.22, 0.25, 0.29, 1],
             /** exposure factor */
             exposure: 1.0,
             /** KHR_lights_punctual */
@@ -92,7 +99,9 @@ class GltfState {
             /** If this is set to true, directional lights will be generated if IBL is disabled */
             useDirectionalLightsWithDisabledIBL: false,
             /** MSAA used for cases which are not handled by the browser (e.g. Transmission)*/
-            internalMSAA: 4
+            internalMSAA: 4,
+            /** Use RGBA16F floating-point main framebuffer instead of RGBA8 */
+            floatingPointFramebuffer: true
         };
 
         // retain a reference to the view with which the state was created, so that it can be validated
@@ -226,6 +235,17 @@ GltfState.DebugOutput = {
         SINGLE_SCATTER_COLOR: "Single-Scatter Color",
         /** output for the pre scatter pass, which collects all lighting contribution for scattering */
         PRE_SCATTER_PASS: "Pre-Scatter Pass"
+    },
+
+    gaussianSplatting: {
+        /** output the spherical harmonics degree 0 */
+        SH_DEGREE_0: "SH Degree 0",
+        /** output the spherical harmonics degree 0-1 */
+        SH_DEGREE_1: "SH Degree 1",
+        /** output the spherical harmonics degree 0-2 */
+        SH_DEGREE_2: "SH Degree 2",
+        /** output the spherical harmonics degree 0-3 */
+        SH_DEGREE_3: "SH Degree 3"
     }
 };
 

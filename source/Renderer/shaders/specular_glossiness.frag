@@ -10,7 +10,8 @@ precision highp float;
 #include <material_info.glsl>
 
 
-out vec4 g_finalColor;
+layout(location = 0) out vec4 g_finalColor;
+layout(location = 1) out uint toneMapFlag;
 
 // Specular Glossiness
 uniform vec3 u_SpecularFactor;
@@ -142,9 +143,7 @@ void main()
 #endif
 
 
-#ifdef MATERIAL_UNLIT
-    color = baseColor.rgb;
-#elif defined(NOT_TRIANGLE) && !defined(HAS_NORMAL_VEC3)
+#if defined(NOT_TRIANGLE) && !defined(HAS_NORMAL_VEC3)
     //Points or Lines with no NORMAL attribute SHOULD be rendered without lighting and instead use the sum of the base color value and the emissive value.
     color = f_emissive + baseColor.rgb;
 #else
@@ -162,14 +161,12 @@ void main()
     baseColor.a = 1.0;
 #endif
 
-#ifdef LINEAR_OUTPUT
     g_finalColor = vec4(color.rgb, baseColor.a);
-#else
-    g_finalColor = vec4(toneMap(color), baseColor.a);
-#endif
+    toneMapFlag = 2u;
 
 #else
     // In case of missing data for a debug view, render a checkerboard.
+    toneMapFlag = 0u;
     g_finalColor = vec4(1.0);
     {
         float frequency = 0.02;
