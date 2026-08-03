@@ -326,17 +326,22 @@ class SampleViewerDecorator extends interactivity.ADecorator {
         if (typeof value === "boolean") {
             return "bool";
         }
-        if (value.length === 2) {
-            return "float2";
-        }
-        if (value.length === 3) {
-            return "float3";
-        }
-        if (value.length === 4) {
-            return "float4";
-        }
-        if (value.length === 16) {
-            return "float4x4";
+        if (Array.isArray(value)) {
+            const el = value[0];
+            if (typeof el === "number") {
+                if (value.length === 2) {
+                    return "float2";
+                }
+                if (value.length === 3) {
+                    return "float3";
+                }
+                if (value.length === 4) {
+                    return "float4";
+                }
+                if (value.length === 16) {
+                    return "float4x4";
+                }
+            }
         }
         return undefined;
     }
@@ -805,6 +810,15 @@ class SampleViewerDecorator extends interactivity.ADecorator {
 
         const animationCount = this.world.gltf.animations.length;
         this.registerJsonPointer(
+            `/animations/${animationCount}`,
+            (path) => {
+                return [path];
+            },
+            (_path, _value) => {},
+            "ref",
+            true
+        );
+        this.registerJsonPointer(
             `/animations/${animationCount}/extensions/KHR_interactivity/isPlaying`,
             (path) => {
                 const pathParts = path.split("/");
@@ -935,6 +949,7 @@ class SampleViewerDecorator extends interactivity.ADecorator {
     }
 
     registerJsonPointer(jsonPtr, getterCallback, setterCallback, typeName, readOnly) {
+        console.log("Registering JSON pointer:", jsonPtr, "Type:", typeName, "ReadOnly:", readOnly);
         this.behaveEngine.registerJsonPointer(
             jsonPtr,
             getterCallback,
