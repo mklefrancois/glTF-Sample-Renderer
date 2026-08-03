@@ -326,22 +326,17 @@ class SampleViewerDecorator extends interactivity.ADecorator {
         if (typeof value === "boolean") {
             return "bool";
         }
-        if (Array.isArray(value)) {
-            const el = value[0];
-            if (typeof el === "number") {
-                if (value.length === 2) {
-                    return "float2";
-                }
-                if (value.length === 3) {
-                    return "float3";
-                }
-                if (value.length === 4) {
-                    return "float4";
-                }
-                if (value.length === 16) {
-                    return "float4x4";
-                }
-            }
+        if (value.length === 2) {
+            return "float2";
+        }
+        if (value.length === 3) {
+            return "float3";
+        }
+        if (value.length === 4) {
+            return "float4";
+        }
+        if (value.length === 16) {
+            return "float4x4";
         }
         return undefined;
     }
