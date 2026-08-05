@@ -562,6 +562,11 @@ class gltfRenderer {
 
     // frame state
     clearFrame(clearColor) {
+        // Ensure depth writes are enabled before clearing any depth buffers.
+        // Transparent drawables leave depthMask(false); unlike the canvas whose depth is
+        // auto-cleared by the browser, mainDepthTexture must be cleared explicitly and
+        // clearBufferfv(DEPTH) is masked by depthMask.
+        this.webGl.context.depthMask(true);
         // Convert clear color from sRGB to linear since we will always transfer to sRGB by default
         const linearClearColor = clearColor.map((c) => Math.pow(c, 2.2));
         this.webGl.context.bindFramebuffer(this.webGl.context.FRAMEBUFFER, this.opaqueFramebuffer);
