@@ -30,7 +30,7 @@
   "author": "Khronos Group Inc.",
   "license": "Apache-2.0",
   "dependencies": {
-    "@khronosgroup/gltf-interactivity-sample-engine": "file:../../glTF-InteractivityGraph-AuthoringTool/src/BasicBehaveEngine",
+    "@khronosgroup/gltf-interactivity-engine": "^1.0.0",
     "fast-png": "^6.2.0",
     "gl-matrix": "^3.2.1",
     "globals": "^15.5.0",

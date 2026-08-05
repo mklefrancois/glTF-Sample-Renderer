@@ -1,5 +1,5 @@
 import { GltfObject } from "./gltf_object";
-import * as interactivity from "@khronosgroup/gltf-interactivity-sample-engine";
+import * as interactivity from "@khronosgroup/gltf-interactivity-engine";
 
 class gltfGraph extends GltfObject {
     static animatedProperties = [];
