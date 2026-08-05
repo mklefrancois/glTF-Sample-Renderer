@@ -17,6 +17,7 @@ class GltfView {
     constructor(context) {
         this.context = context;
         this.renderer = new gltfRenderer(this.context);
+        this.lastFrameTime = undefined;
     }
 
     /**
@@ -57,6 +58,10 @@ class GltfView {
      * @param {*} height of the viewport
      */
     renderFrame(state, width, height) {
+        const lastFrameTime =
+            this.lastFrameTime === undefined ? performance.now() : this.lastFrameTime;
+        this.lastFrameTime = performance.now();
+        const currentFrameTime = performance.now();
         this.renderer.init(state);
         this._animate(state);
 
@@ -79,8 +84,19 @@ class GltfView {
         }
 
         scene.applyTransformHierarchy(state.gltf);
+        if (state.physicsController.playing && state.physicsController.enabled) {
+            state.physicsController.simulateStep(state, (currentFrameTime - lastFrameTime) / 1000);
+        }
 
         this.renderer.drawScene(state, scene);
+
+        // We do not want to reset the dirty flags when the physics simulation is paused, since changes from interactivity would not be applied after resuming the simulation.
+        if (
+            (state.physicsController.playing && state.physicsController.enabled) ||
+            !state.physicsController.enabled
+        ) {
+            state.gltf.resetAllDirtyFlags();
+        }
     }
 
     /**

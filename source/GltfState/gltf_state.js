@@ -1,6 +1,7 @@
 import { GraphController } from "../gltf/interactivity.js";
 import { UserCamera } from "../gltf/user_camera.js";
 import { AnimationTimer } from "./animation_timer.js";
+import { PhysicsController } from "./physics_controller.js";
 
 /**
  * GltfState containing a state for visualization in GltfView
@@ -56,6 +57,8 @@ class GltfState {
         /* Array of screen positions for hovering. Currently only one is supported. */
         this.hoverPositions = [{ x: undefined, y: undefined }];
 
+        /* the physics controller allows selecting and controlling different physics engines */
+        this.physicsController = new PhysicsController();
         /** Indicates whether the view needs to be redrawn, currently used to indicate new sorting orders for gaussian splatting */
         this.needsRedraw = false;
 

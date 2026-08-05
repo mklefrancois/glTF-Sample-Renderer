@@ -1,5 +1,7 @@
 import { GltfObject } from "./gltf_object";
 import * as interactivity from "@khronosgroup/gltf-interactivity-engine";
+import { mat4 } from "gl-matrix";
+import { recurseAllAnimatedProperties } from "./gltf_utils";
 
 class gltfGraph extends GltfObject {
     static animatedProperties = [];
@@ -62,6 +64,28 @@ class GraphController {
         if (this.graphIndex !== undefined) {
             this.decorator.receiveHover(pickingResult);
         }
+    }
+
+    rigidBodyTriggerEntered(triggerNodeIndex, colliderNodeIndex, motionNodeIndex) {
+        if (this.graphIndex === undefined) {
+            return;
+        }
+        this.decorator.rigidBodyTriggerEntered(
+            triggerNodeIndex,
+            colliderNodeIndex,
+            motionNodeIndex ?? -1
+        );
+    }
+
+    rigidBodyTriggerExited(triggerNodeIndex, colliderNodeIndex, motionNodeIndex) {
+        if (this.graphIndex === undefined) {
+            return;
+        }
+        this.decorator.rigidBodyTriggerExited(
+            triggerNodeIndex,
+            colliderNodeIndex,
+            motionNodeIndex ?? -1
+        );
     }
 
     /**
@@ -205,6 +229,12 @@ class SampleViewerDecorator extends interactivity.ADecorator {
         this.behaveEngine.stopAnimationAt = this.stopAnimationAt;
         this.behaveEngine.startAnimation = this.startAnimation;
         this.behaveEngine.getParentNodeIndex = this.getParentNodeIndex;
+
+        this.behaveEngine.applyImpulseToRigidBody = this.applyImpulseToRigidBody;
+        this.behaveEngine.applyPointImpulseToRigidBody = this.applyPointImpulseToRigidBody;
+        this.behaveEngine.rayCastRigidBodies = this.rayCastRigidBodies;
+
+        this.registerRigidBodyNodes();
     }
 
     dispatchCustomEvent(eventName, data) {
@@ -298,13 +328,7 @@ class SampleViewerDecorator extends interactivity.ADecorator {
         this.behaveEngine.clearScheduledDelays();
         this.behaveEngine.clearValueEvaluationCache();
 
-        const resetAnimatedProperty = (path, propertyName, parent, readOnly) => {
-            if (readOnly) {
-                return;
-            }
-            parent.animatedPropertyObjects[propertyName].rest();
-        };
-        this.recurseAllAnimatedProperties(this.world.gltf, resetAnimatedProperty);
+        this.world.gltf.resetAnimatedProperties(this.world.sceneIndex ?? -1);
     }
 
     processNodeStarted(node) {
@@ -420,62 +444,6 @@ class SampleViewerDecorator extends interactivity.ADecorator {
         return currentNode;
     }
 
-    recurseAllAnimatedProperties(gltfObject, callable, currentPath = "") {
-        if (gltfObject === undefined || !(gltfObject instanceof GltfObject)) {
-            return;
-        }
-
-        // Call for all animated properties of this gltfObject
-        for (const property of gltfObject.constructor.animatedProperties) {
-            if (gltfObject[property] === undefined) {
-                continue;
-            }
-            callable(currentPath, property, gltfObject, false);
-        }
-
-        // Call for all read-only animated properties of this gltfObject
-        for (const property of gltfObject.constructor.readOnlyAnimatedProperties) {
-            if (gltfObject[property] === undefined) {
-                continue;
-            }
-            callable(currentPath, property, gltfObject, true);
-        }
-
-        // Recurse into all GltfObject
-        for (const key in gltfObject) {
-            if (gltfObject[key] instanceof GltfObject) {
-                this.recurseAllAnimatedProperties(
-                    gltfObject[key],
-                    callable,
-                    currentPath + "/" + key
-                );
-            } else if (Array.isArray(gltfObject[key])) {
-                if (gltfObject[key].length === 0 || !(gltfObject[key][0] instanceof GltfObject)) {
-                    continue;
-                }
-                for (let i = 0; i < gltfObject[key].length; i++) {
-                    this.recurseAllAnimatedProperties(
-                        gltfObject[key][i],
-                        callable,
-                        currentPath + "/" + key + "/" + i
-                    );
-                }
-            }
-        }
-
-        // Recurse into all extensions
-        for (const extensionName in gltfObject.extensions) {
-            const extension = gltfObject.extensions[extensionName];
-            if (extension instanceof GltfObject) {
-                this.recurseAllAnimatedProperties(
-                    extension,
-                    callable,
-                    currentPath + "/extensions/" + extensionName
-                );
-            }
-        }
-    }
-
     registerKnownPointers() {
         // The engine is checking if a path is valid so we do not need to handle this here
         if (this.world === undefined) {
@@ -554,7 +522,7 @@ class SampleViewerDecorator extends interactivity.ADecorator {
                 false
             );
         };
-        this.recurseAllAnimatedProperties(this.world.gltf, registerFunction);
+        recurseAllAnimatedProperties(this.world.gltf, registerFunction);
 
         // Special pointers that need to be handled manually
 
@@ -566,6 +534,20 @@ class SampleViewerDecorator extends interactivity.ADecorator {
                     return [0];
                 }
                 return [lights.length];
+            },
+            (_path, _value) => {},
+            "int",
+            true
+        );
+
+        this.registerJsonPointer(
+            `/extensions/KHR_implicit_shapes/shapes.length`,
+            (_path) => {
+                const shapes = this.world.gltf.extensions?.KHR_implicit_shapes?.shapes;
+                if (shapes === undefined) {
+                    return [0];
+                }
+                return [shapes.length];
             },
             (_path, _value) => {},
             "int",
@@ -595,7 +577,7 @@ class SampleViewerDecorator extends interactivity.ADecorator {
                 const nodeIndex = parseInt(pathParts[2]);
                 const node = this.world.gltf.nodes[nodeIndex];
                 node.scene.applyTransformHierarchy(this.world.gltf);
-                return node.worldTransform.slice(0);
+                return node.getRenderedWorldTransform().slice(0);
             },
             (_path, _value) => {},
             "float4x4",
@@ -609,7 +591,18 @@ class SampleViewerDecorator extends interactivity.ADecorator {
                 const pathParts = path.split("/");
                 const nodeIndex = parseInt(pathParts[2]);
                 const node = this.world.gltf.nodes[nodeIndex];
-                return node.getLocalTransform();
+                if (!node.scaledPhysicsTransform) {
+                    return node.getLocalTransform();
+                }
+                node.scene.applyTransformHierarchy(this.world.gltf);
+                const parentTransform = node.parentNode
+                    ? node.parentNode.getRenderedWorldTransform()
+                    : mat4.create();
+                const parentInverse = mat4.create();
+                mat4.invert(parentInverse, parentTransform);
+                const localTransform = mat4.create();
+                mat4.multiply(localTransform, parentInverse, node.getRenderedWorldTransform());
+                return localTransform;
             },
             (_path, _value) => {},
             "float4x4",
@@ -979,6 +972,18 @@ class SampleViewerDecorator extends interactivity.ADecorator {
         animation.speed = speed;
         animation.endCallback = callback;
         animation.createdTimestamp = this.world.animationTimer.elapsedSec();
+    }
+
+    rayCastRigidBodies(rayStart, rayEnd) {
+        return this.world.physicsController.rayCast(rayStart, rayEnd);
+    }
+
+    applyImpulseToRigidBody(nodeIndex, linearImpulse, angularImpulse) {
+        this.world.physicsController.applyImpulse(nodeIndex, linearImpulse, angularImpulse);
+    }
+
+    applyPointImpulseToRigidBody(nodeIndex, impulse, position) {
+        this.world.physicsController.applyPointImpulse(nodeIndex, impulse, position);
     }
 }
 

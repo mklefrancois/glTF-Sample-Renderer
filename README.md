@@ -17,6 +17,11 @@ Try out the [glTF Sample Viewer](https://github.khronos.org/glTF-Sample-Viewer-R
     - [GltfState](#gltfstate)
       - [GraphController](#graphcontroller)
       - [AnimationTimer](#animationtimer)
+      - [PhysicsController](#physicscontroller)
+      - [Dirty flags](#dirty-flags)
+        - [`AnimatableProperty` dirty flags](#animatableproperty-dirty-flags)
+        - [Node transform dirty flags](#node-transform-dirty-flags)
+        - [Resetting dirty flags](#resetting-dirty-flags)
     - [ResourceLoader](#resourceloader)
   - [Render Fidelity Tools](#render-fidelity-tools)
   - [Development](#development)
@@ -41,6 +46,7 @@ For KHR_interactivity, the behavior engine of the [glTF-InteractivityGraph-Autho
 - [x] [KHR_animation_pointer](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_animation_pointer)
 - [x] [KHR_draco_mesh_compression](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_draco_mesh_compression)
 - [x] [KHR_gaussian_splatting](https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_gaussian_splatting/README.md)
+- [x] [KHR_implicit_shapes](https://github.com/eoineoineoin/glTF_Physics/blob/master/extensions/2.0/Khronos/KHR_implicit_shapes/README.md)
 - [x] [KHR_interactivity](https://github.com/KhronosGroup/glTF/pull/2293)
 - [x] [KHR_lights_punctual](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_lights_punctual)
 - [x] [KHR_materials_anisotropy](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_materials_anisotropy)
@@ -65,6 +71,9 @@ For KHR_interactivity, the behavior engine of the [glTF-InteractivityGraph-Autho
 - [x] [KHR_node_hoverability](https://github.com/KhronosGroup/glTF/pull/2426)
 - [x] [KHR_node_selectability](https://github.com/KhronosGroup/glTF/pull/2422)
 - [x] [KHR_node_visibility](https://github.com/KhronosGroup/glTF/pull/2410)
+- [x] [KHR_physics_rigid_bodies](https://github.com/eoineoineoin/glTF_Physics/blob/master/extensions/2.0/Khronos/KHR_physics_rigid_bodies/README.md)\
+    Supported Engines:
+  - NVIDIA PhysX ([limitations](PhysicsEngines.md))
 - [x] [KHR_texture_basisu](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_texture_basisu)
 - [x] [KHR_texture_transform](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_texture_transform)
 - [x] [KHR_xmp_json_ld](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_xmp_json_ld)
@@ -98,6 +107,14 @@ const update = () => {
 window.requestAnimationFrame(update);
 ```
 
+The GltfView handles the order of execution for animations, interactivity and physics:
+1. Animations are applied
+2. Any playing interactivity graph is executed
+3. The transform hierarchy is computed
+4. Any playing physics engine is updated and applied
+5. The scene is rendered
+6. If physics is used, all dirty flags are reset
+
 ### GltfState
 
 The GltfState encapsulates the state of the content of a GltfView. _As currently some WebGL resources are stored directly in the Gltf objects, the state cannot be shared between views._
@@ -125,6 +142,83 @@ To make sure that `KHR_interactivity` always behaves correctly together with `KH
 
 The GltfState contains an instance of the AnimationTimer, which is used to play, pause and reset animations. It needs to be started to enable animations.
 The `KHR_interactivity` extension controls animations if present. Therefore, the GraphController uses the time of the AnimationTimer to control animations. The GraphController is paused and resumed independently from the AnimationTimer, thus if an interactivity graph is paused, currently playing animations will continue playing if the AnimationTimer is not paused as well.
+
+#### PhysicsController
+
+The GltfState contains an instance of the `PhysicsController`, which manages rigid-body physics simulation for glTF scenes that use the `KHR_physics_rigid_bodies` and `KHR_implicit_shapes` extensions. The controller is available on the state as `state.physicsController`.
+
+Before loading any scene, the physics engine must be initialized. Currently only `"NvidiaPhysX"` is supported:
+
+```js
+await state.physicsController.initializeEngine("NvidiaPhysX");
+```
+
+After a glTF has been loaded, call `loadScene` to build the physics actors for the active scene:
+
+```js
+state.physicsController.loadScene(state, state.sceneIndex);
+```
+
+The simulation is advanced by calling `simulateStep` each frame inside `GltfView`. The controller uses a fixed-step accumulator and only advances the simulation when enough time (`simulationStepTime`, default `1/60` s) has elapsed.
+
+Playback can be paused and resumed independently of other state:
+
+```js
+state.physicsController.pauseSimulation();
+state.physicsController.resumeSimulation();
+```
+
+The `playing` property reflects whether the simulation is currently running, and `enabled` indicates whether the loaded scene contains any physics data.
+
+Debug visualization of colliders and joints can be toggled at runtime:
+
+```js
+state.physicsController.enableDebugColliders(true);
+state.physicsController.enableDebugJoints(true);
+```
+
+The following runtime physics operations are available, and are also called internally by the `KHR_interactivity` engine:
+
+```js
+// Apply a linear and/or angular impulse to a node
+state.physicsController.applyImpulse(nodeIndex, linearImpulse, angularImpulse);
+
+// Apply an impulse at a specific world-space position on a node
+state.physicsController.applyPointImpulse(nodeIndex, impulse, position);
+
+// Cast a ray and return the first hit
+const hit = state.physicsController.rayCast(rayStart, rayEnd);
+```
+
+#### Dirty flags
+
+Dirty flags are per-property boolean markers used to propagate change information through the scene graph without re-evaluating the entire hierarchy every frame. They are the primary mechanism by which animations, `KHR_interactivity`, and the physics simulation communicate what has changed.
+
+##### `AnimatableProperty` dirty flags
+
+Every animatable property defined by the glTF Object Model (e.g. `translation`, `rotation`, `scale`, `mass`, `linearVelocity`) is backed by an `AnimatableProperty` instance that carries a `dirty` boolean. A property is marked dirty whenever its value is written — either by the animation system or by the interactivity graph. It does not matter, if the written value is the same as the old value, since one can animate an e.g. a node transform to stay still. If the dirty flag would not be set in this case, the physics engine might apply e.g. gravitational forces to the an animated body.
+
+##### Node transform dirty flags
+
+Each `gltfNode` carries two additional boolean flags that are computed during `scene.applyTransformHierarchy()`:
+
+| Flag | Set when |
+|---|---|
+| `node.dirtyTransform` | This node's local transform or any ancestor's transform changed since the last reset. |
+| `node.dirtyScale` | This node's scale or any ancestor's scale changed since the last reset. |
+
+##### Resetting dirty flags
+
+`glTF.resetAllDirtyFlags()` performs a full reset in one call.
+
+`GltfView.renderFrame()` calls this automatically at the end of each frame — but **only** when the physics simulation is either disabled or actively playing. When the simulation is paused, dirty flags are intentionally **not** cleared so that any changes made while paused (e.g. via `KHR_interactivity`) are still visible to the physics engine once playback resumes.
+
+If you manually advance the simulation (e.g. via a single-step button) you must reset dirty flags yourself afterwards:
+
+```js
+state.physicsController.simulateStep(state, 1 / 60);
+state.gltf.resetAllDirtyFlags();
+```
 
 ### ResourceLoader
 

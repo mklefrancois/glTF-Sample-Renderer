@@ -27,14 +27,20 @@ class gltfNode extends GltfObject {
         // non gltf
         this.worldTransform = mat4.create();
         this.worldQuaternion = quat.create();
+        this.worldScale = vec3.create();
         this.inverseWorldTransform = mat4.create();
-        this.normalMatrix = mat4.create();
         this.light = undefined;
         this.instanceMatrices = undefined;
         this.instanceWorldTransforms = undefined;
         this.pickingColor = undefined;
         this.parentNode = undefined;
         this.scene = undefined;
+        this.physicsTransform = undefined;
+        this.scaledPhysicsTransform = undefined;
+
+        // These are set if this or any parent transform changed
+        this.dirtyTransform = true;
+        this.dirtyScale = true;
     }
 
     // eslint-disable-next-line no-unused-vars
@@ -121,6 +127,12 @@ class gltfNode extends GltfObject {
                 jsonNode.extensions.KHR_node_hoverability
             );
         }
+        if (jsonNode.extensions?.KHR_physics_rigid_bodies !== undefined) {
+            this.extensions.KHR_physics_rigid_bodies = new KHR_physics_rigid_bodies_node();
+            this.extensions.KHR_physics_rigid_bodies.fromJson(
+                jsonNode.extensions.KHR_physics_rigid_bodies
+            );
+        }
     }
 
     getWeights(gltf) {
@@ -161,6 +173,27 @@ class gltfNode extends GltfObject {
             this.scale
         );
     }
+
+    getRenderedWorldTransform() {
+        return this.scaledPhysicsTransform ?? this.worldTransform;
+    }
+
+    isLocalTransformDirty() {
+        for (const prop of ["rotation", "scale", "translation"]) {
+            if (this.animatedPropertyObjects[prop].dirty) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    clearTransformDirty() {
+        for (const prop of ["rotation", "scale", "translation"]) {
+            this.animatedPropertyObjects[prop].dirty = false;
+        }
+        this.dirtyTransform = false;
+        this.dirtyScale = false;
+    }
 }
 
 class KHR_node_visibility extends GltfObject {
@@ -184,6 +217,113 @@ class KHR_node_hoverability extends GltfObject {
     constructor() {
         super();
         this.hoverable = true;
+    }
+}
+
+class KHR_physics_rigid_bodies_node extends GltfObject {
+    static animatedProperties = [];
+    constructor() {
+        super();
+        this.motion = undefined;
+        this.collider = undefined;
+        this.trigger = undefined;
+        this.joint = undefined;
+    }
+    fromJson(json) {
+        super.fromJson(json);
+
+        if (json.motion !== undefined) {
+            this.motion = new KHR_physics_rigid_bodies_motion();
+            this.motion.fromJson(json.motion);
+        }
+        if (json.collider !== undefined) {
+            this.collider = new KHR_physics_rigid_bodies_collider();
+            this.collider.fromJson(json.collider);
+        }
+        if (json.trigger !== undefined) {
+            this.trigger = new KHR_physics_rigid_bodies_trigger();
+            this.trigger.fromJson(json.trigger);
+        }
+        if (json.joint !== undefined) {
+            this.joint = new KHR_physics_rigid_bodies_joint();
+            this.joint.fromJson(json.joint);
+        }
+    }
+}
+
+class KHR_physics_rigid_bodies_trigger extends GltfObject {
+    static animatedProperties = [];
+    constructor() {
+        super();
+        this.geometry = undefined;
+        this.nodes = undefined;
+        this.collisionFilter = undefined;
+    }
+}
+
+class KHR_physics_rigid_bodies_collider extends GltfObject {
+    static animatedProperties = [];
+    constructor() {
+        super();
+        this.geometry = undefined;
+        this.physicsMaterial = undefined;
+        this.collisionFilter = undefined;
+    }
+    fromJson(json) {
+        super.fromJson(json);
+        if (json.geometry !== undefined) {
+            this.geometry = new KHR_physics_rigid_bodies_geometry();
+            this.geometry.fromJson(json.geometry);
+        }
+    }
+}
+
+class KHR_physics_rigid_bodies_geometry extends GltfObject {
+    static animatedProperties = [];
+    constructor() {
+        super();
+        this.convexHull = false;
+        this.shape = undefined;
+        this.mesh = undefined;
+    }
+}
+
+class KHR_physics_rigid_bodies_motion extends GltfObject {
+    static animatedProperties = [
+        "isKinematic",
+        "mass",
+        "centerOfMass",
+        "inertiaDiagonal",
+        "inertiaOrientation",
+        "linearVelocity",
+        "angularVelocity",
+        "gravityFactor"
+    ];
+    constructor() {
+        super();
+        this.isKinematic = false;
+        this.mass = undefined;
+        this.centerOfMass = undefined;
+        this.inertiaDiagonal = undefined;
+        this.inertiaOrientation = undefined;
+        this.linearVelocity = [0, 0, 0];
+        this.angularVelocity = [0, 0, 0];
+        this.gravityFactor = 1;
+
+        // Non glTF
+        // We need to store the computed velocities on switching between kinematic and dynamic.
+        this.computedLinearVelocity = undefined;
+        this.computedAngularVelocity = undefined;
+    }
+}
+
+class KHR_physics_rigid_bodies_joint extends GltfObject {
+    static animatedProperties = ["enableCollision"];
+    constructor() {
+        super();
+        this.connectedNode = undefined;
+        this.joint = undefined;
+        this.enableCollision = false;
     }
 }
 

@@ -20,6 +20,7 @@ import animationShader from "./shaders/animation.glsl";
 import cubemapVertShader from "./shaders/cubemap.vert";
 import cubemapFragShader from "./shaders/cubemap.frag";
 import scatterShader from "./shaders/scatter.frag";
+import simpleFragShader from "./shaders/simple.frag";
 import specularGlossinesShader from "./shaders/specular_glossiness.frag";
 import splatVertexShader from "./shaders/splat.vert";
 import splatFragmentShader from "./shaders/splat.frag";
@@ -75,6 +76,7 @@ class gltfRenderer {
         shaderSources.set("cubemap.vert", cubemapVertShader);
         shaderSources.set("cubemap.frag", cubemapFragShader);
         shaderSources.set("specular_glossiness.frag", specularGlossinesShader);
+        shaderSources.set("simple.frag", simpleFragShader);
         shaderSources.set("splat.vert", splatVertexShader);
         shaderSources.set("splat.frag", splatFragmentShader);
         shaderSources.set("fullscreen.vert", fullscreenVertShader);
@@ -670,7 +672,7 @@ class gltfRenderer {
 
         let counter = 0;
         this.opaqueDrawables = Object.groupBy(this.opaqueDrawables, (a) => {
-            const winding = Math.sign(mat4.determinant(a.node.worldTransform));
+            const winding = Math.sign(mat4.determinant(a.node.getRenderedWorldTransform()));
             const id = `${a.node.mesh}_${winding}_${a.primitiveIndex}`;
             // Disable instancing for skins, morph targets and if the GPU attributes limit is reached.
             // Additionally we define a new id for each instance of the EXT_mesh_gpu_instancing extension.
@@ -785,7 +787,7 @@ class gltfRenderer {
         mat4.multiply(this.viewProjectionMatrix, this.projMatrix, this.viewMatrix);
 
         // Update skins.
-        for (const node of this.nodes) {
+        for (const node of state.gltf.nodes) {
             if (node.mesh !== undefined && node.skin !== undefined) {
                 this.updateSkin(state, node);
             }
@@ -797,7 +799,7 @@ class gltfRenderer {
             if (instance.length > 1) {
                 instanceOffset = [];
                 for (const iDrawable of instance) {
-                    instanceOffset.push(iDrawable.node.worldTransform);
+                    instanceOffset.push(iDrawable.node.getRenderedWorldTransform());
                 }
             } else if (instance[0].node.instanceMatrices !== undefined) {
                 // Set instance matrices for EXT_mesh_gpu_instancing extension
@@ -807,6 +809,7 @@ class gltfRenderer {
             }
             instanceWorldTransforms.push(instanceOffset);
         }
+
         const scatterEnabled =
             this.scatterDrawables.length > 0 &&
             state.renderingParameters.enabledExtensions.KHR_materials_volume_scatter &&
@@ -1069,6 +1072,49 @@ class gltfRenderer {
             this.shaderCache,
             ["LINEAR_OUTPUT 1"]
         );
+
+        // Physics debug view
+        if (state.physicsController.enabled) {
+            const lines = state.physicsController.getDebugLineData();
+            if (lines.length !== 0) {
+                const vertexShader = "picking.vert";
+                const fragmentShader = "simple.frag";
+                const fragmentHash = this.shaderCache.selectShader(fragmentShader, []);
+                const vertexHash = this.shaderCache.selectShader(vertexShader, []);
+                this.shader = this.shaderCache.getShaderProgram(fragmentHash, vertexHash);
+                this.webGl.context.useProgram(this.shader.program);
+                this.shader.updateUniform("u_ViewProjectionMatrix", this.viewProjectionMatrix);
+                this.shader.updateUniform("u_ModelMatrix", mat4.create());
+                this.shader.updateUniform("u_Color", vec4.fromValues(1.0, 0.0, 0.0, 1.0));
+                const location = this.shader.getAttributeLocation("a_position");
+                if (location !== null) {
+                    if (this.physicsDebugBuffer === undefined) {
+                        this.physicsDebugBuffer = this.webGl.context.createBuffer();
+                    }
+                    this.webGl.context.bindBuffer(
+                        this.webGl.context.ARRAY_BUFFER,
+                        this.physicsDebugBuffer
+                    );
+                    this.webGl.context.bufferData(
+                        this.webGl.context.ARRAY_BUFFER,
+                        new Float32Array(lines),
+                        this.webGl.context.STATIC_DRAW
+                    );
+                    this.webGl.context.vertexAttribPointer(
+                        location,
+                        3,
+                        this.webGl.context.FLOAT,
+                        false,
+                        0,
+                        0
+                    );
+                    this.webGl.context.enableVertexAttribArray(location);
+                    this.webGl.context.drawArrays(this.webGl.context.LINES, 0, lines.length / 3);
+                    this.webGl.context.disableVertexAttribArray(location);
+                    this.webGl.context.bindBuffer(this.webGl.context.ARRAY_BUFFER, null);
+                }
+            }
+        }
 
         let drawableCounter = 0;
         for (const instance of Object.values(this.opaqueDrawables)) {
@@ -1679,10 +1725,16 @@ class gltfRenderer {
             this.webGl.context.uniform1i(this.shader.getUniformLocation("u_MaterialID"), renderpassConfiguration.drawID);
         }
 
+        const worldTransform = node.getRenderedWorldTransform();
+      
+        const normalMatrix = mat4.create();
+        mat4.invert(normalMatrix, node.getRenderedWorldTransform());
+        mat4.transpose(normalMatrix, normalMatrix);
+
         // update model dependant matrices once per node
         this.shader.updateUniform("u_ViewProjectionMatrix", viewProjectionMatrix);
-        this.shader.updateUniform("u_ModelMatrix", node.worldTransform);
-        this.shader.updateUniform("u_NormalMatrix", node.normalMatrix, false);
+        this.shader.updateUniform("u_ModelMatrix", worldTransform);
+        this.shader.updateUniform("u_NormalMatrix", normalMatrix, false);
         this.shader.updateUniform("u_Exposure", state.renderingParameters.exposure, false);
         this.shader.updateUniform("u_Camera", this.currentCameraPosition, false);
         if (renderpassConfiguration.picking) {
@@ -1691,7 +1743,7 @@ class gltfRenderer {
 
         this.updateAnimationUniforms(state, node, primitive);
 
-        if (mat4.determinant(node.worldTransform) < 0.0)
+        if (mat4.determinant(worldTransform) < 0.0)
         {
             this.webGl.context.frontFace(GL.CW);
         }
@@ -1931,7 +1983,7 @@ class gltfRenderer {
 	
 	            this.webGl.context.uniform2i(this.shader.getUniformLocation("u_TransmissionFramebufferSize"), this.opaqueFramebufferWidth, this.opaqueFramebufferHeight);
 	
-	            this.webGl.context.uniformMatrix4fv(this.shader.getUniformLocation("u_ModelMatrix"),false, node.worldTransform);
+	            this.webGl.context.uniformMatrix4fv(this.shader.getUniformLocation("u_ModelMatrix"),false, worldTransform);
 	            this.webGl.context.uniformMatrix4fv(this.shader.getUniformLocation("u_ViewMatrix"),false, this.viewMatrix);
 	            this.webGl.context.uniformMatrix4fv(this.shader.getUniformLocation("u_ProjectionMatrix"),false, this.projMatrix);
 	        }

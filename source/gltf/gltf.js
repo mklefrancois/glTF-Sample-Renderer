@@ -4,6 +4,7 @@ import { gltfBufferView } from "./buffer_view.js";
 import { gltfCamera } from "./camera.js";
 import { gltfImage } from "./image.js";
 import { gltfLight } from "./light.js";
+import { gltfImplicitShape } from "./implicit_shape.js";
 import { gltfMaterial } from "./material.js";
 import { gltfMesh } from "./mesh.js";
 import { gltfNode } from "./node.js";
@@ -17,12 +18,16 @@ import { gltfAnimation } from "./animation.js";
 import { gltfSkin } from "./skin.js";
 import { gltfVariant } from "./variant.js";
 import { gltfGraph } from "./interactivity.js";
+import { KHR_physics_rigid_bodies } from "./rigid_bodies.js";
+import { recurseAllAnimatedProperties } from "./gltf_utils.js";
+import { AnimatableProperty } from "./animatable_property.js";
 
 const allowedExtensions = [
     "KHR_accessor_float64",
     "KHR_animation_pointer",
     "KHR_draco_mesh_compression",
     "KHR_gaussian_splatting",
+    "KHR_implicit_shapes",
     "KHR_interactivity",
     "KHR_lights_image_based",
     "KHR_lights_punctual",
@@ -46,6 +51,7 @@ const allowedExtensions = [
     "KHR_node_hoverability",
     "KHR_node_selectability",
     "KHR_node_visibility",
+    "KHR_physics_rigid_bodies",
     "KHR_texture_basisu",
     "KHR_texture_transform",
     "KHR_xmp_json_ld",
@@ -142,6 +148,21 @@ class glTF extends GltfObject {
                 gltfGraph
             );
             this.extensions.KHR_interactivity.graph = json.extensions.KHR_interactivity?.graph ?? 0;
+        }
+
+        if (json.extensions?.KHR_implicit_shapes !== undefined) {
+            this.extensions.KHR_implicit_shapes = new GltfObject([]);
+            this.extensions.KHR_implicit_shapes.shapes = objectsFromJsons(
+                json.extensions.KHR_implicit_shapes.shapes,
+                gltfImplicitShape
+            );
+        }
+
+        if (json.extensions?.KHR_physics_rigid_bodies !== undefined) {
+            this.extensions.KHR_physics_rigid_bodies = new KHR_physics_rigid_bodies();
+            this.extensions.KHR_physics_rigid_bodies.fromJson(
+                json.extensions.KHR_physics_rigid_bodies
+            );
         }
 
         this.materials.push(gltfMaterial.createDefault());
@@ -254,6 +275,31 @@ class glTF extends GltfObject {
         }
 
         return nonDisjointAnimations;
+    }
+
+    resetAnimatedProperties(sceneIndex = -1) {
+        const resetAnimatedProperty = (path, propertyName, parent, readOnly) => {
+            if (readOnly) {
+                return;
+            }
+            parent.animatedPropertyObjects[propertyName].rest();
+        };
+        recurseAllAnimatedProperties(this, resetAnimatedProperty);
+        if (sceneIndex >= 0) {
+            const scene = this.scenes[sceneIndex];
+            scene.applyTransformHierarchy(this);
+        }
+    }
+
+    /**
+     * Reset all dirty flags to false. This should be called after processing all animatable properties that have their dirty flags set to true.
+     */
+    resetAllDirtyFlags() {
+        AnimatableProperty.resetAllDirtyFlags();
+        for (const node of this.nodes) {
+            node.dirtyScale = false;
+            node.dirtyTransform = false;
+        }
     }
 }
 
