@@ -1,5 +1,4 @@
 import { glTF } from "../gltf/gltf.js";
-import { getIsGlb, getContainingFolder } from "../gltf/utils.js";
 import { GlbParser } from "./glb_parser.js";
 import { gltfLoader } from "./loader.js";
 import { gltfImage, ImageMimeType } from "../gltf/image.js";
@@ -11,10 +10,13 @@ import init from "../libs/mikktspace.js";
 
 import { AsyncFileReader } from "./async_file_reader.js";
 
+import { MeshoptDecoder } from "meshoptimizer";
 import { DracoDecoder } from "./draco.js";
 import { KtxDecoder } from "./ktx.js";
 
 import { loadHDR } from "../libs/hdrpng.js";
+
+import { ResourceLoaderUtils } from "./loader_utils.js";
 
 /**
  * ResourceLoader can be used to load resources for the GltfState
@@ -38,9 +40,10 @@ class ResourceLoader {
      * loadGltf asynchroneously and create resources for rendering
      * @param {(String | ArrayBuffer | File)} gltfFile the .gltf or .glb file either as path or as preloaded resource. In node.js environments, only ArrayBuffer types are accepted.
      * @param {File[]} [externalFiles] additional files containing resources that are referenced in the gltf
+     * @param {Boolean} allowResourceAbsolutePath whether to allow absolute paths for images/buffers.
      * @returns {Promise} a promise that fulfills when the gltf file was loaded
      */
-    async loadGltf(gltfFile, externalFiles) {
+    async loadGltf(gltfFile, externalFiles, allowResourceAbsolutePath = true) {
         let isGlb = undefined;
         let buffers = undefined;
         let json = undefined;
@@ -73,8 +76,8 @@ class ResourceLoader {
             gltfFile[1] instanceof File
         ) {
             let fileContent = gltfFile[1];
-            filename = gltfFile[1].name;
-            isGlb = getIsGlb(filename);
+            filename = gltfFile[0];
+            isGlb = ResourceLoaderUtils.getExtension(filename) == "glb";
             if (isGlb) {
                 data = await AsyncFileReader.readAsArrayBuffer(fileContent);
             } else {
@@ -99,16 +102,12 @@ class ResourceLoader {
 
         const gltf = new glTF(filename);
         gltf.ktxDecoder = this.view.ktxDecoder;
+        gltf.moptDecoder = MeshoptDecoder;
         //Make sure draco decoder instance is ready
         gltf.fromJson(json);
 
-        // because the gltf image paths are not relative
-        // to the gltf, we have to resolve all image paths before that
-        for (const image of gltf.images) {
-            image.resolveRelativePath(getContainingFolder(gltf.path));
-        }
         await init(`${this.libPath}mikktspace_bg.wasm`);
-        await gltfLoader.load(gltf, this.view.context, buffers);
+        await gltfLoader.load(gltf, this.view.context, buffers, allowResourceAbsolutePath);
 
         return gltf;
     }
@@ -132,7 +131,7 @@ class ResourceLoader {
             });
             image = await loadHDR(new Uint8Array(imageData));
         } else {
-            console.error("Passed invalid type to loadEnvironment " + typeof gltfFile);
+            console.error("Passed invalid type to loadEnvironment " + typeof environmentFile);
         }
         if (image === undefined) {
             return undefined;

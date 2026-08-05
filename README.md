@@ -45,6 +45,7 @@ For KHR_interactivity, the behavior engine of the [glTF-InteractivityGraph-Autho
     - [ ] Skins not supported since WebGL2 only supports 32 bit
 - [x] [KHR_animation_pointer](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_animation_pointer)
 - [x] [KHR_draco_mesh_compression](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_draco_mesh_compression)
+- [x] [KHR_gaussian_splatting](https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_gaussian_splatting/README.md)
 - [x] [KHR_implicit_shapes](https://github.com/eoineoineoin/glTF_Physics/blob/master/extensions/2.0/Khronos/KHR_implicit_shapes/README.md)
 - [x] [KHR_interactivity](https://github.com/KhronosGroup/glTF/pull/2293)
 - [x] [KHR_lights_punctual](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_lights_punctual)
@@ -65,6 +66,7 @@ For KHR_interactivity, the behavior engine of the [glTF-InteractivityGraph-Autho
 - [KHR_materials_volume_scatter](https://github.com/KhronosGroup/glTF/blob/e17468db6fd9ae3ce73504a9f317bd853af01a30/extensions/2.0/Khronos/KHR_materials_volume_scatter/README.md)
     - [x] For dense volumes using KHR_materials_diffuse_transmission
     - [ ] For sparse volumes using KHR_materials_transmission
+- [x] [KHR_meshopt_compression](https://github.com/KhronosGroup/glTF/pull/2517)
 - [x] [KHR_mesh_quantization](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_mesh_quantization)
 - [x] [KHR_node_hoverability](https://github.com/KhronosGroup/glTF/pull/2426)
 - [x] [KHR_node_selectability](https://github.com/KhronosGroup/glTF/pull/2422)
@@ -76,6 +78,7 @@ For KHR_interactivity, the behavior engine of the [glTF-InteractivityGraph-Autho
 - [x] [KHR_texture_transform](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_texture_transform)
 - [x] [KHR_xmp_json_ld](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_xmp_json_ld)
 - [x] [EXT_mesh_gpu_instancing](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Vendor/EXT_mesh_gpu_instancing)
+- [x] [EXT_meshopt_compression](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Vendor/EXT_meshopt_compression)
 - [x] [EXT_texture_webp](https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Vendor/EXT_texture_webp)
 
 ## API
@@ -114,7 +117,7 @@ The GltfView handles the order of execution for animations, interactivity and ph
 
 ### GltfState
 
-The GltfState encapsulates the state of the content of a GltfView. *As currently some WebGL resources are stored directly in the Gltf objects, the state cannot be shared between views.*
+The GltfState encapsulates the state of the content of a GltfView. _As currently some WebGL resources are stored directly in the Gltf objects, the state cannot be shared between views._
 
 ```js
 const state = view.createState();
@@ -263,27 +266,3 @@ There are extensions for both Prettier and ESLint in Visual Studio Code. They ca
 - [ESLint](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint)
 
 You are encouraged to run Prettier and ESLint on your code before committing.
-
-### Testing
-
-glTF-Sample-Render uses [Playwright](https://playwright.dev/) for testing.\
-Currently, only `KHR_interactivity` tests are implemented.
-
-To run the tests run
-
-```
-npm run test
-```
-
-Playwright creates a new browser instance for each test. It can run on Chrome, Safari, Firefox and emulated mobile browsers. After all tests were run, a browser window with a summary will open. The `tests/testApp` directory contains a minimal frontend to be able to start a testing server. The server is started automatically. For debugging the test server you can also start it manually by running
-
-```
-npm run testApp
-```
-
-Tests are defined in the `tests` directory by files with the `.spec.ts` ending.\
-The interactivity tests download all test assets from the [glTF-Test-Assets-Interactivity repository](https://github.com/KhronosGroup/glTF-Test-Assets-Interactivity), loads each test file and listens on the `test/onStart`, `test/onSuccess` and `test/onFailed` events to determine if an interactivity test passes or not. `test/onStart` returns the needed execution time in seconds.
-
-You can also run more complex Playwright commands such as `npx playwright test --ui` or `npx playwright test --project chromium`. For more information check https://playwright.dev/docs/running-tests
-
-One can also use the [Playwright extension for Visual Studio Code](https://marketplace.visualstudio.com/items?itemName=ms-playwright.playwright) to run the test more easily with advanced parameters, run tests only selectively or debug tests by adding breakpoints.

@@ -4,4 +4,6 @@ import { GltfState } from "./GltfState/gltf_state.js";
 
 import { ResourceLoader } from "./ResourceLoader/resource_loader.js";
 
-export { GltfView, GltfState, ResourceLoader };
+import { ResourceLoaderUtils } from "./ResourceLoader/loader_utils.js";
+
+export { GltfView, GltfState, ResourceLoader, ResourceLoaderUtils };
