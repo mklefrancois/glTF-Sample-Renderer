@@ -30,7 +30,8 @@ precision highp float;
 #endif
 
 
-out vec4 g_finalColor;
+layout(location = 0) out vec4 g_finalColor;
+layout(location = 1) out uint toneMapFlag;
 
 
 void main()
@@ -40,6 +41,24 @@ void main()
 #if ALPHAMODE == ALPHAMODE_OPAQUE
     baseColor.a = 1.0;
 #endif
+#ifdef MATERIAL_UNLIT
+#if ALPHAMODE == ALPHAMODE_MASK
+    if (baseColor.a < u_AlphaCutoff)
+    {
+        discard;
+    }
+    baseColor.a = 1.0;
+#endif
+#ifdef TRANSMISSION_PASS
+// If used for transmission, we need to invert exposure and tone mapping, so the original color is computed in the general render pass
+    g_finalColor = vec4(toneMapInverse(baseColor.rgb), baseColor.a);
+    toneMapFlag = 2u;
+#else
+    g_finalColor = baseColor;
+    toneMapFlag = 1u;
+#endif
+// PBR Flow. This else goes all the way to the end of the file
+#else
     vec3 color = vec3(0);
 
     vec3 v = normalize(u_Camera - v_Position);
@@ -363,10 +382,7 @@ void main()
     f_emissive *= texture(u_EmissiveSampler, getEmissiveUV()).rgb;
 #endif
 
-
-#ifdef MATERIAL_UNLIT
-    color = baseColor.rgb;
-#elif defined(NOT_TRIANGLE) && !defined(HAS_NORMAL_VEC3)
+#if defined(NOT_TRIANGLE) && !defined(HAS_NORMAL_VEC3)
     //Points or Lines with no NORMAL attribute SHOULD be rendered without lighting and instead use the sum of the base color value and the emissive value.
     color = f_emissive + baseColor.rgb;
 #else
@@ -384,14 +400,14 @@ void main()
     baseColor.a = 1.0;
 #endif
 
-#ifdef LINEAR_OUTPUT
+
     g_finalColor = vec4(color.rgb, baseColor.a);
-#else
-    g_finalColor = vec4(toneMap(color), baseColor.a);
-#endif
+    toneMapFlag = 2u;
+
 
 #else
     // In case of missing data for a debug view, render a checkerboard.
+    toneMapFlag = 0u;
     g_finalColor = vec4(1.0);
     {
         float frequency = 0.02;
@@ -548,5 +564,6 @@ vec3 specularTexture = vec3(1.0);
 #endif
 #endif
 
+#endif
 #endif
 }
