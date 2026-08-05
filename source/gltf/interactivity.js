@@ -944,7 +944,6 @@ class SampleViewerDecorator extends interactivity.ADecorator {
     }
 
     registerJsonPointer(jsonPtr, getterCallback, setterCallback, typeName, readOnly) {
-        console.log("Registering JSON pointer:", jsonPtr, "Type:", typeName, "ReadOnly:", readOnly);
         this.behaveEngine.registerJsonPointer(
             jsonPtr,
             getterCallback,
