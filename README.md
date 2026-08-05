@@ -172,27 +172,3 @@ There are extensions for both Prettier and ESLint in Visual Studio Code. They ca
 - [ESLint](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint)
 
 You are encouraged to run Prettier and ESLint on your code before committing.
-
-### Testing
-
-glTF-Sample-Render uses [Playwright](https://playwright.dev/) for testing.\
-Currently, only `KHR_interactivity` tests are implemented.
-
-To run the tests run
-
-```
-npm run test
-```
-
-Playwright creates a new browser instance for each test. It can run on Chrome, Safari, Firefox and emulated mobile browsers. After all tests were run, a browser window with a summary will open. The `tests/testApp` directory contains a minimal frontend to be able to start a testing server. The server is started automatically. For debugging the test server you can also start it manually by running
-
-```
-npm run testApp
-```
-
-Tests are defined in the `tests` directory by files with the `.spec.ts` ending.\
-The interactivity tests download all test assets from the [glTF-Test-Assets-Interactivity repository](https://github.com/KhronosGroup/glTF-Test-Assets-Interactivity), loads each test file and listens on the `test/onStart`, `test/onSuccess` and `test/onFailed` events to determine if an interactivity test passes or not. `test/onStart` returns the needed execution time in seconds.
-
-You can also run more complex Playwright commands such as `npx playwright test --ui` or `npx playwright test --project chromium`. For more information check https://playwright.dev/docs/running-tests
-
-One can also use the [Playwright extension for Visual Studio Code](https://marketplace.visualstudio.com/items?itemName=ms-playwright.playwright) to run the test more easily with advanced parameters, run tests only selectively or debug tests by adding breakpoints.

@@ -15,7 +15,6 @@
         "testApp": "npm run build & npx serve ./dist",
         "prepublishOnly": "npm run build && npm run build_docs",
         "build_docs": "jsdoc2md source/gltf-sample-renderer.js source/GltfView/gltf_view.js source/GltfState/gltf_state.js source/GltfState/animation_timer.js source/ResourceLoader/resource_loader.js source/gltf/user_camera.js source/gltf/interactivity.js source/ResourceLoader/loader_utils.js > API.md",
-        "test": "npx playwright test",
         "lint": "eslint source/**/*.js",
         "lint:fix": "eslint --fix source/**/*.js",
         "prettier": "npx prettier source/**/*.js tests/**/*.js tests/**/*.ts --check",
@@ -39,7 +38,6 @@
         "meshoptimizer": "^1.0.1"
     },
     "devDependencies": {
-        "@playwright/test": "^1.56.0",
         "@rollup/plugin-commonjs": "^29.0.0",
         "@rollup/plugin-node-resolve": "^15.2.3",
         "@rollup/plugin-wasm": "^6.2.2",
