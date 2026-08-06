@@ -324,7 +324,7 @@ class gltfPrimitive extends GltfObject {
         ) {
             console.info("Generating tangents using the MikkTSpace algorithm.");
             console.time("Tangent generation");
-            const tangentHash = `${this.attributes.POSITION}_${this.attributes.NORMAL}_${this.attributes.TEXCOORD_0}`;
+            const tangentHash = `${this.indices}_${this.attributes.POSITION}_${this.attributes.NORMAL}_${this.attributes.TEXCOORD_0}`;
             this.unweld(gltf);
             this.generateTangents(gltf, tangentHash);
             console.timeEnd("Tangent generation");
